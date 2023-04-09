@@ -38,7 +38,7 @@ async fn main() {
         .set_certificate_file(
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("certs")
-                .join("certificate.crt"),
+                .join("server_cert.crt"),
             SslFiletype::PEM,
         )
         .unwrap();
@@ -46,7 +46,7 @@ async fn main() {
         .set_private_key_file(
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("certs")
-                .join("privateKey.key"),
+                .join("server_pk.key"),
             SslFiletype::PEM,
         )
         .unwrap();
@@ -58,7 +58,7 @@ async fn main() {
     let my_cert_bytes = std::fs::read(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("certs")
-            .join("certificate.crt"),
+            .join("client_cert.crt"),
     )
     .unwrap();
     let my_cert = X509::from_pem(&my_cert_bytes).unwrap();
