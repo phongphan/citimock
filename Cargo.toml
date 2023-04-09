@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 axum = "0.6.12"
-futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
+axum-server = { version = "0.4.7", features = ["tls-openssl"] }
 hyper = "0.14.25"
 openssl = "0.10.49"
 openssl-sys = "0.9.84"

@@ -1,5 +1,5 @@
 use axum::{
-    body::{self, Body, Full},
+    body::Body,
     extract::ConnectInfo,
     http::{header::CONTENT_TYPE, method::Method, Request, StatusCode},
     middleware::{self, Next},
@@ -7,21 +7,14 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use futures_util::future::poll_fn;
-use hyper::server::{
-    accept::Accept,
-    conn::{AddrIncoming, Http},
-};
-use openssl::ssl::{Ssl, SslAcceptor, SslFiletype, SslMethod, SslVerifyMode};
+use axum_server::tls_openssl::OpenSSLConfig;
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod, SslVerifyMode};
 use openssl::x509::{
     store::{X509Store, X509StoreBuilder},
     X509,
 };
-use std::{net::SocketAddr, path::PathBuf, pin::Pin, sync::Arc};
-use tokio::net::TcpListener;
-use tokio_openssl::SslStream;
-use tower::{MakeService, ServiceBuilder};
-use tower_http::ServiceBuilderExt;
+use std::{net::SocketAddr, path::PathBuf};
+use tower::ServiceBuilder;
 
 use citimock::certificates::cert_manager::{KeyContent, KeyStore, SimpleKeyStore};
 use citimock::handlers::authentication::authentication_v2;
@@ -54,16 +47,15 @@ async fn main() {
 
     // client verifier
     // set options to make sure to validate the peer aka mtls
-
-    let my_cert_bytes = std::fs::read(
+    let trusted_client_cert_bytes = std::fs::read(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("certs")
             .join("client_cert.crt"),
     )
     .unwrap();
-    let my_cert = X509::from_pem(&my_cert_bytes).unwrap();
+    let trusted_client_cert = X509::from_pem(&trusted_client_cert_bytes).unwrap();
     let mut builder = X509StoreBuilder::new().unwrap();
-    let _ = builder.add_cert(my_cert);
+    let _ = builder.add_cert(trusted_client_cert);
     let store: X509Store = builder.build();
 
     let mut verify_mode = SslVerifyMode::empty();
@@ -73,54 +65,18 @@ async fn main() {
     tls_builder.set_verify(verify_mode);
     // openssl
 
-    let acceptor = tls_builder.build();
-    let listener = TcpListener::bind("127.0.0.1:3000").await.unwrap();
-    let mut listener = AddrIncoming::from_listener(listener).unwrap();
-
-    let protocol = Arc::new(Http::new());
-    let mut app = Router::new()
+    let app = Router::new()
         .route("/", get(handler))
         .route("/v2/auth", post(authentication_v2))
-        .layer(ServiceBuilder::new().layer(middleware::from_fn(validate_content_type)))
-        .into_make_service_with_connect_info::<SocketAddr>();
+        .layer(ServiceBuilder::new().layer(middleware::from_fn(validate_content_type)));
 
-    loop {
-        let stream = poll_fn(|cx| Pin::new(&mut listener).poll_accept(cx))
-            .await
-            .unwrap()
-            .unwrap();
-
-        let acceptor = acceptor.clone();
-        let protocol = protocol.clone();
-        let svc = app.make_service(&stream);
-
-        tokio::spawn(async move {
-            let ssl = Ssl::new(acceptor.context()).unwrap();
-            let mut tls_stream = SslStream::new(ssl, stream).unwrap();
-
-            SslStream::accept(Pin::new(&mut tls_stream)).await.unwrap();
-
-            let _ = protocol
-                .serve_connection(tls_stream, svc.await.unwrap())
-                .await;
-        });
-    }
-
-    /*let app = Router::new()
-        .route("/", get(handler))
-        .route("/v2/auth", post(authentication_v2))
-        .layer(
-            ServiceBuilder::new()
-                .map_request_body(body::boxed)
-                .layer(middleware::from_fn(validate_content_type)),
-        );
-
+    let cfg = OpenSSLConfig::try_from(tls_builder).unwrap();
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     println!("listening on {}", addr);
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+    axum_server::bind_openssl(addr, cfg)
+        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
         .await
-        .unwrap();*/
+        .unwrap();
 }
 
 async fn handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> Html<String> {
