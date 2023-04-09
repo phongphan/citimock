@@ -2,7 +2,7 @@ use openssl::ssl::{Ssl, SslAcceptor, SslFiletype, SslMethod, SslVerifyMode};
 use openssl::x509::{X509, store::{X509Store, X509StoreBuilder}};
 use tokio_openssl::SslStream;
 use axum::{
-    body::{self, BoxBody, Full},
+    body::{self, Body, Full},
     extract::ConnectInfo,
     http::{header::CONTENT_TYPE, method::Method, Request, StatusCode},
     middleware::{self, Next},
@@ -31,14 +31,25 @@ async fn main() {
 
     // openssl
     let mut tls_builder = SslAcceptor::mozilla_modern_v5(SslMethod::tls()).unwrap();
-    tls_builder.set_certificate_file("./certs/certificate.crt", SslFiletype::PEM).unwrap();
-    tls_builder.set_private_key_file("./certs/privateKey.key", SslFiletype::PEM).unwrap();
+    tls_builder.set_certificate_file(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("certs")
+            .join("certificate.crt"),
+        SslFiletype::PEM).unwrap();
+    tls_builder.set_private_key_file(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("certs")
+            .join("privateKey.key"),
+        SslFiletype::PEM).unwrap();
     tls_builder.check_private_key().unwrap();
 
     // client verifier
     // set options to make sure to validate the peer aka mtls
 
-    let my_cert_bytes = std::fs::read("./certs/certificate.crt").unwrap();
+    let my_cert_bytes = std::fs::read(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("certs")
+            .join("certificate.crt")).unwrap();
     let my_cert = X509::from_pem(&my_cert_bytes).unwrap();
     let mut builder = X509StoreBuilder::new().unwrap();
     let _ = builder.add_cert(my_cert);
@@ -58,12 +69,11 @@ async fn main() {
     let protocol = Arc::new(Http::new());
     let mut app = Router::new()
         .route("/", get(handler))
-        /*.route("/v2/auth", post(authentication_v2))
+        .route("/v2/auth", post(authentication_v2))
         .layer(
             ServiceBuilder::new()
-                .map_request_body(body::boxed::<BoxBody>)
                 .layer(middleware::from_fn(validate_content_type)),
-        )*/
+        )
         .into_make_service_with_connect_info::<SocketAddr>();
 
     loop {
@@ -110,11 +120,10 @@ async fn handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> Html<String> {
 }
 
 async fn validate_content_type(
-    request: Request<BoxBody>,
-    next: Next<BoxBody>,
+    request: Request<Body>,
+    next: Next<Body>,
 ) -> Result<impl IntoResponse, Response> {
     let methods_with_body = [Method::PATCH, Method::POST, Method::PUT];
-    println!("{:?}", request);
     if methods_with_body.contains(request.method()) {
         let content_type_header = request.headers().get(CONTENT_TYPE);
         let content_type = content_type_header.and_then(|value| value.to_str().ok());
@@ -128,14 +137,5 @@ async fn validate_content_type(
         }
     }
     
-    let (parts, body) = request.into_parts();
-    // this wont work if the body is an long running stream
-    let bytes = hyper::body::to_bytes(body)
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response())?;
-
-    //do_thing_with_request_body(bytes.clone());
-
-    let request = Ok(Request::from_parts(parts, body::boxed(Full::from(bytes))))?;
     Ok(next.run(request).await)
 }
