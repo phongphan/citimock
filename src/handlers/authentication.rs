@@ -4,7 +4,8 @@ use axum::{
     extract::FromRequest,
     http::Request,
     response::{IntoResponse, Response},
-    Json};
+    Json,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize)]
@@ -21,12 +22,11 @@ pub struct AuthenticationRequest {
 
 pub async fn authentication_v2(XmlEncBody(body): XmlEncBody) -> Json<AuthenticationResponse> {
     println!("{:?}", body);
-    Json(AuthenticationResponse{
+    Json(AuthenticationResponse {
         email: "hello".to_string(),
-        password: "world".to_string()
+        password: "world".to_string(),
     })
 }
-
 
 pub struct XmlEncBody(Bytes);
 

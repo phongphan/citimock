@@ -1,6 +1,3 @@
-use openssl::ssl::{Ssl, SslAcceptor, SslFiletype, SslMethod, SslVerifyMode};
-use openssl::x509::{X509, store::{X509Store, X509StoreBuilder}};
-use tokio_openssl::SslStream;
 use axum::{
     body::{self, Body, Full},
     extract::ConnectInfo,
@@ -8,19 +5,26 @@ use axum::{
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
-    Router};
+    Router,
+};
 use futures_util::future::poll_fn;
 use hyper::server::{
     accept::Accept,
     conn::{AddrIncoming, Http},
 };
+use openssl::ssl::{Ssl, SslAcceptor, SslFiletype, SslMethod, SslVerifyMode};
+use openssl::x509::{
+    store::{X509Store, X509StoreBuilder},
+    X509,
+};
 use std::{net::SocketAddr, path::PathBuf, pin::Pin, sync::Arc};
 use tokio::net::TcpListener;
+use tokio_openssl::SslStream;
 use tower::{MakeService, ServiceBuilder};
 use tower_http::ServiceBuilderExt;
 
-use citimock::handlers::authentication::authentication_v2;
 use citimock::certificates::cert_manager::{KeyContent, KeyStore, SimpleKeyStore};
+use citimock::handlers::authentication::authentication_v2;
 
 #[tokio::main]
 async fn main() {
@@ -28,19 +32,24 @@ async fn main() {
     ks.store(KeyContent::new("", "", "", "", 0, 0));
     ks.get_by_client("1", "encryption_cert");
 
-
     // openssl
     let mut tls_builder = SslAcceptor::mozilla_modern_v5(SslMethod::tls()).unwrap();
-    tls_builder.set_certificate_file(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("certs")
-            .join("certificate.crt"),
-        SslFiletype::PEM).unwrap();
-    tls_builder.set_private_key_file(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("certs")
-            .join("privateKey.key"),
-        SslFiletype::PEM).unwrap();
+    tls_builder
+        .set_certificate_file(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("certs")
+                .join("certificate.crt"),
+            SslFiletype::PEM,
+        )
+        .unwrap();
+    tls_builder
+        .set_private_key_file(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("certs")
+                .join("privateKey.key"),
+            SslFiletype::PEM,
+        )
+        .unwrap();
     tls_builder.check_private_key().unwrap();
 
     // client verifier
@@ -49,7 +58,9 @@ async fn main() {
     let my_cert_bytes = std::fs::read(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("certs")
-            .join("certificate.crt")).unwrap();
+            .join("certificate.crt"),
+    )
+    .unwrap();
     let my_cert = X509::from_pem(&my_cert_bytes).unwrap();
     let mut builder = X509StoreBuilder::new().unwrap();
     let _ = builder.add_cert(my_cert);
@@ -70,10 +81,7 @@ async fn main() {
     let mut app = Router::new()
         .route("/", get(handler))
         .route("/v2/auth", post(authentication_v2))
-        .layer(
-            ServiceBuilder::new()
-                .layer(middleware::from_fn(validate_content_type)),
-        )
+        .layer(ServiceBuilder::new().layer(middleware::from_fn(validate_content_type)))
         .into_make_service_with_connect_info::<SocketAddr>();
 
     loop {
@@ -129,13 +137,15 @@ async fn validate_content_type(
         let content_type = content_type_header.and_then(|value| value.to_str().ok());
 
         if let Some(content_type) = content_type {
-            if !(content_type.starts_with("application/xml") || content_type.starts_with("text/xml")) {
+            if !(content_type.starts_with("application/xml")
+                || content_type.starts_with("text/xml"))
+            {
                 return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response());
             }
         } else {
             return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response());
         }
     }
-    
+
     Ok(next.run(request).await)
 }
