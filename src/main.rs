@@ -13,20 +13,22 @@ use openssl::x509::{
     store::{X509Store, X509StoreBuilder},
     X509,
 };
-use std::{net::SocketAddr, path::PathBuf};
+use std::{error, net::SocketAddr, path::PathBuf};
 use tower::ServiceBuilder;
 
-use citimock::certificates::cert_manager::{KeyContent, KeyStore, SimpleKeyStore};
 use citimock::handlers::authentication::authentication_v2;
 
 #[tokio::main]
 async fn main() {
-    let mut ks: SimpleKeyStore = KeyStore::new("default");
-    ks.store(KeyContent::new("", "", "", "", 0, 0));
-    ks.get_by_client("1", "encryption_cert");
-
     // openssl
-    let mut tls_builder = SslAcceptor::mozilla_modern_v5(SslMethod::tls()).unwrap();
+    let mut tls_builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+    let ssl_cert = x509_slurp(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("certs")
+            .join("server_cert.crt"),
+    )
+    .unwrap();
+    tls_builder.set_certificate(ssl_cert.as_ref()).unwrap();
     tls_builder
         .set_certificate_file(
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -47,13 +49,12 @@ async fn main() {
 
     // client verifier
     // set options to make sure to validate the peer aka mtls
-    let trusted_client_cert_bytes = std::fs::read(
+    let trusted_client_cert = x509_slurp(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("certs")
             .join("client_cert.crt"),
     )
     .unwrap();
-    let trusted_client_cert = X509::from_pem(&trusted_client_cert_bytes).unwrap();
     let mut builder = X509StoreBuilder::new().unwrap();
     let _ = builder.add_cert(trusted_client_cert);
     let store: X509Store = builder.build();
@@ -79,8 +80,13 @@ async fn main() {
         .unwrap();
 }
 
+fn x509_slurp(path_buf: PathBuf) -> Result<X509, Box<dyn error::Error>> {
+    let data = std::fs::read(path_buf)?;
+    X509::from_pem(&data).map_err(|e| e.into())
+}
+
 async fn handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> Html<String> {
-    Html(format!("<h1>Hello, world! {}", addr.to_string()))
+    Html(format!("<h1>Hello, world! {}", addr))
 }
 
 async fn validate_content_type(
