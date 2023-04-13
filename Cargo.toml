@@ -3,8 +3,6 @@ name = "citimock"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 axum = "0.6.12"
 axum-server = { version = "0.4.7", features = ["tls-openssl"] }
@@ -16,3 +14,6 @@ tokio = { version = "1.0", features = ["full"] }
 tokio-openssl = "0.6.3"
 tower = "0.4.13"
 tower-http = { version = "0.4.0", features = ["map-request-body", "util"] }
+
+[build-dependencies]
+bindgen = { version = "^0.64.0" }
