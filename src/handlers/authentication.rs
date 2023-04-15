@@ -3,42 +3,51 @@ use axum::{
     async_trait,
     body::{Body, Bytes},
     extract::FromRequest,
-    http::Request,
+    http::{header, HeaderValue, Request, StatusCode},
     response::{IntoResponse, Response},
-    Json,
 };
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_xml_rs;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename = "oAuthToken")]
 pub struct AuthenticationRequest {
-    grant_type: String,
-    scope: String,
-    source_application: String,
+    #[serde(rename = "grantType")]
+    pub grant_type: String,
+    pub scope: String,
+    #[serde(rename = "sourceApplication")]
+    pub source_application: String,
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename = "token")]
 pub struct AuthenticationResponse {
-    token_type: String,
-    access_token: String,
-    expires_in: u32,
-    scope: String,
+    pub token_type: String,
+    pub access_token: String,
+    pub expires_in: u32,
+    pub scope: String,
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename = "loginResponse")]
 pub struct AuthenticationError {
-    // loginResponse
-    code: String,    // statusCode
-    message: String, // statusMessage
+    #[serde(rename = "statusCode")]
+    pub code: String,
+
+    #[serde(rename = "statusMessage")]
+    pub message: String,
 }
 
 pub async fn authentication_v2(
     ExtractBasicAuth((user, password)): ExtractBasicAuth,
-    XmlEncBody(body): XmlEncBody,
-) -> Json<AuthenticationResponse> {
+    Xml(body): Xml<AuthenticationRequest>,
+    //XmlEncBody(body): XmlEncBody,
+) -> Xml<AuthenticationResponse> {
     println!("user: {:?}", user);
     println!("password: {:?}", password);
     println!("body: {:?}", body);
-    Json(AuthenticationResponse {
+    Xml(AuthenticationResponse {
         token_type: "client_credentials".to_owned(),
         access_token: "thisistoken".to_owned(),
         scope: "/authenticationservices/v1".to_owned(),
@@ -63,5 +72,96 @@ where
         //do_thing_with_request_body(body.clone());
 
         Ok(Self(body))
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Xml<T>(pub T);
+
+#[async_trait]
+impl<S, T> FromRequest<S, Body> for Xml<T>
+where
+    S: Send + Sync,
+    T: DeserializeOwned,
+{
+    type Rejection = Response;
+
+    async fn from_request(req: Request<Body>, state: &S) -> Result<Self, Self::Rejection> {
+        if xml_content_type(&req) {
+            match String::from_request(req, state)
+                .await
+                .map_err(|_| (StatusCode::BAD_REQUEST, "cannot extract request body"))
+                .and_then(|s| {
+                    serde_xml_rs::from_str(&s)
+                        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid input XML"))
+                }) {
+                Ok(value) => Ok(Self(value)),
+                Err((status_code, message)) => Err(error_response(status_code, "400", message)),
+            }
+        } else {
+            Err(error_response(
+                StatusCode::BAD_REQUEST,
+                "400",
+                "invalid content-type",
+            ))
+        }
+    }
+}
+
+fn xml_content_type(request: &Request<Body>) -> bool {
+    let content_type_header = request.headers().get(header::CONTENT_TYPE);
+    let content_type = content_type_header.and_then(|value| value.to_str().ok());
+
+    if let Some(content_type) = content_type {
+        content_type.starts_with("application/xml") || content_type.starts_with("text/xml")
+    } else {
+        false
+    }
+}
+
+fn error_response(status_code: StatusCode, code: &str, message: &str) -> Response {
+    (
+        status_code,
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/xml"),
+        )],
+        serde_xml_rs::to_string(&AuthenticationError {
+            code: code.to_owned(),
+            message: message.to_owned(),
+        })
+        .unwrap(),
+    )
+        .into_response()
+}
+
+impl<T> IntoResponse for Xml<T>
+where
+    T: Serialize,
+{
+    fn into_response(self) -> Response {
+        match serde_xml_rs::to_string(&self.0) {
+            Ok(body) => (
+                [(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static("application/xml"),
+                )],
+                body,
+            )
+                .into_response(),
+            Err(err) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static("application/xml"),
+                )],
+                serde_xml_rs::to_string(&AuthenticationError {
+                    code: "500".to_owned(),
+                    message: err.to_string(),
+                })
+                .unwrap(),
+            )
+                .into_response(),
+        }
     }
 }

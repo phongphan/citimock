@@ -7,6 +7,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+
 use axum_server::tls_openssl::OpenSSLConfig;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod, SslVerifyMode};
 use openssl::x509::{
@@ -69,21 +70,34 @@ async fn main() {
     tls_builder.set_verify(verify_mode);
     // openssl
 
-    let app = Router::new()
-        .route("/", get(handler))
+    let health_check_router = Router::new().route("/", get(handler));
+
+    let authenticate_router = Router::new()
         .route(
             "/authenticationservices/v2/oauth/token",
             post(authentication_v2),
         )
         .layer(ServiceBuilder::new().layer(middleware::from_fn(validate_content_type)));
 
+    //let app = health_check_router.merge(authenticate_router);
+    let api_app = authenticate_router;
+    let healtz_app = health_check_router;
+
     let cfg = OpenSSLConfig::try_from(tls_builder).unwrap();
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    println!("listening on {}", addr);
-    axum_server::bind_openssl(addr, cfg)
-        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-        .await
-        .unwrap();
+    let addr = SocketAddr::from(([127, 0, 0, 1], 8443));
+    println!("api listening on {}", addr);
+    let api_server = axum_server::bind_openssl(addr, cfg)
+        .serve(api_app.into_make_service_with_connect_info::<SocketAddr>());
+
+    let healthz_addr = SocketAddr::from(([127, 0, 0, 1], 8080));
+    println!("healtz listening on {}", healthz_addr);
+    let healthz_server = axum::Server::bind(&healthz_addr)
+        .serve(healtz_app.into_make_service_with_connect_info::<SocketAddr>());
+
+    let (api_server_res, healthz_server_res) =
+        futures_util::future::join(api_server, healthz_server).await;
+    api_server_res.unwrap();
+    healthz_server_res.unwrap();
 }
 
 fn x509_slurp(path_buf: PathBuf) -> Result<X509, Box<dyn error::Error>> {
