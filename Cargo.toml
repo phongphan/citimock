@@ -12,12 +12,12 @@ hyper = "0.14.25"
 itertools = "0.10.5"
 openssl = "0.10.49"
 openssl-sys = "0.9.84"
-serde = { version = "1.0.159", features = ["derive"] }
-serde-xml-rs = "0.6.0"
 tokio = { version = "1.0", features = ["full"] }
 tokio-openssl = "0.6.3"
 tower = "0.4.13"
 tower-http = { version = "0.4.0", features = ["map-request-body", "util"] }
+yaserde = "0.8.0"
+yaserde_derive = "0.8.0"
 
 [build-dependencies]
 bindgen = { version = "^0.64.0" }

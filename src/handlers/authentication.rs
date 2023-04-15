@@ -6,22 +6,24 @@ use axum::{
     http::{header, HeaderValue, Request, StatusCode},
     response::{IntoResponse, Response},
 };
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use serde_xml_rs;
+use yaserde;
+use yaserde_derive::{YaDeserialize, YaSerialize};
 
-#[derive(Debug, Deserialize)]
-#[serde(rename = "oAuthToken")]
+#[derive(Debug, YaDeserialize)]
+#[yaserde(prefix = "default",
+          namespace = "default: http://com.citi.citiconnect/services/types/oauthtoken/v1"
+          rename = "oAuthToken")]
 pub struct AuthenticationRequest {
-    #[serde(rename = "grantType")]
+    #[yaserde(attribute, rename = "grantType", prefix = "default")]
     pub grant_type: String,
+    #[yaserde(attribute, rename = "scope", prefix = "default")]
     pub scope: String,
-    #[serde(rename = "sourceApplication")]
+    #[yaserde(attribute, rename = "sourceApplication", prefix = "default")]
     pub source_application: String,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename = "token")]
+#[derive(Debug, YaSerialize)]
+#[yaserde(rename = "token")]
 pub struct AuthenticationResponse {
     pub token_type: String,
     pub access_token: String,
@@ -29,13 +31,13 @@ pub struct AuthenticationResponse {
     pub scope: String,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename = "loginResponse")]
+#[derive(Debug, YaSerialize)]
+#[yaserde(rename = "loginResponse")]
 pub struct AuthenticationError {
-    #[serde(rename = "statusCode")]
+    #[yaserde(rename = "statusCode")]
     pub code: String,
 
-    #[serde(rename = "statusMessage")]
+    #[yaserde(rename = "statusMessage")]
     pub message: String,
 }
 
@@ -82,7 +84,7 @@ pub struct Xml<T>(pub T);
 impl<S, T> FromRequest<S, Body> for Xml<T>
 where
     S: Send + Sync,
-    T: DeserializeOwned,
+    T: yaserde::YaDeserialize,
 {
     type Rejection = Response;
 
@@ -92,7 +94,7 @@ where
                 .await
                 .map_err(|_| (StatusCode::BAD_REQUEST, "cannot extract request body"))
                 .and_then(|s| {
-                    serde_xml_rs::from_str(&s)
+                    yaserde::de::from_str(&s)
                         .map_err(|_| (StatusCode::BAD_REQUEST, "invalid input XML"))
                 }) {
                 Ok(value) => Ok(Self(value)),
@@ -126,7 +128,7 @@ fn error_response(status_code: StatusCode, code: &str, message: &str) -> Respons
             header::CONTENT_TYPE,
             HeaderValue::from_static("application/xml"),
         )],
-        serde_xml_rs::to_string(&AuthenticationError {
+        yaserde::ser::to_string(&AuthenticationError {
             code: code.to_owned(),
             message: message.to_owned(),
         })
@@ -137,10 +139,10 @@ fn error_response(status_code: StatusCode, code: &str, message: &str) -> Respons
 
 impl<T> IntoResponse for Xml<T>
 where
-    T: Serialize,
+    T: yaserde::YaSerialize,
 {
     fn into_response(self) -> Response {
-        match serde_xml_rs::to_string(&self.0) {
+        match yaserde::ser::to_string(&self.0) {
             Ok(body) => (
                 [(
                     header::CONTENT_TYPE,
@@ -155,7 +157,7 @@ where
                     header::CONTENT_TYPE,
                     HeaderValue::from_static("application/xml"),
                 )],
-                serde_xml_rs::to_string(&AuthenticationError {
+                yaserde::ser::to_string(&AuthenticationError {
                     code: "500".to_owned(),
                     message: err.to_string(),
                 })
