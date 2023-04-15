@@ -6,7 +6,9 @@ edition = "2021"
 [dependencies]
 axum = "0.6.12"
 axum-server = { version = "0.4.7", features = ["tls-openssl"] }
+base64 = "0.21.0"
 hyper = "0.14.25"
+itertools = "0.10.5"
 openssl = "0.10.49"
 openssl-sys = "0.9.84"
 serde = { version = "1.0.159", features = ["derive"] }

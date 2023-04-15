@@ -20,6 +20,9 @@ use citimock::handlers::authentication::authentication_v2;
 
 #[tokio::main]
 async fn main() {
+    let key = citimock::certificates::utils::generate_test_key();
+    println!("{:?}", key);
+
     // openssl
     let mut tls_builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     let ssl_cert = x509_slurp(
@@ -68,7 +71,10 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(handler))
-        .route("/v2/auth", post(authentication_v2))
+        .route(
+            "/authenticationservices/v2/oauth/token",
+            post(authentication_v2),
+        )
         .layer(ServiceBuilder::new().layer(middleware::from_fn(validate_content_type)));
 
     let cfg = OpenSSLConfig::try_from(tls_builder).unwrap();

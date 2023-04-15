@@ -1,3 +1,4 @@
+use crate::extractors::basic_auth::ExtractBasicAuth;
 use axum::{
     async_trait,
     body::{Body, Bytes},
@@ -8,23 +9,40 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize)]
-pub struct AuthenticationResponse {
-    email: String,
-    password: String,
-}
-
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct AuthenticationRequest {
-    email: String,
-    password: String,
+    grant_type: String,
+    scope: String,
+    source_application: String,
 }
 
-pub async fn authentication_v2(XmlEncBody(body): XmlEncBody) -> Json<AuthenticationResponse> {
-    println!("{:?}", body);
+#[derive(Debug, Serialize)]
+pub struct AuthenticationResponse {
+    token_type: String,
+    access_token: String,
+    expires_in: u32,
+    scope: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AuthenticationError {
+    // loginResponse
+    code: String,    // statusCode
+    message: String, // statusMessage
+}
+
+pub async fn authentication_v2(
+    ExtractBasicAuth((user, password)): ExtractBasicAuth,
+    XmlEncBody(body): XmlEncBody,
+) -> Json<AuthenticationResponse> {
+    println!("user: {:?}", user);
+    println!("password: {:?}", password);
+    println!("body: {:?}", body);
     Json(AuthenticationResponse {
-        email: "hello".to_string(),
-        password: "world".to_string(),
+        token_type: "client_credentials".to_owned(),
+        access_token: "thisistoken".to_owned(),
+        scope: "/authenticationservices/v1".to_owned(),
+        expires_in: 1800,
     })
 }
 
