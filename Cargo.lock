@@ -335,6 +335,7 @@ dependencies = [
  "libpasta",
  "openssl",
  "openssl-sys",
+ "ring",
  "sqlx",
  "tokio",
  "tokio-openssl",

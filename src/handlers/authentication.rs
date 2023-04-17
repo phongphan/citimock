@@ -11,20 +11,19 @@ use yaserde_derive::{YaDeserialize, YaSerialize};
 use crate::AppState;
 use std::sync::Arc;
 
-use core::fmt::Write;
-
 use libpasta;
 
 #[derive(Debug, YaDeserialize)]
-#[yaserde(prefix = "default",
-          namespace = "default: http://com.citi.citiconnect/services/types/oauthtoken/v1"
+#[yaserde(prefix = "defaultns",
+          default_namesapce = "defaultns",
+          namespace = "defaultns: http://com.citi.citiconnect/services/types/oauthtoken/v1",
           rename = "oAuthToken")]
 pub struct AuthenticationRequest {
-    #[yaserde(attribute, rename = "grantType", prefix = "default")]
+    #[yaserde(attribute, rename = "grantType", prefix = "defaultns")]
     pub grant_type: String,
-    #[yaserde(attribute, rename = "scope", prefix = "default")]
+    #[yaserde(attribute, rename = "scope", prefix = "defaultns")]
     pub scope: String,
-    #[yaserde(attribute, rename = "sourceApplication", prefix = "default")]
+    #[yaserde(attribute, rename = "sourceApplication", prefix = "defaultns")]
     pub source_application: String,
 }
 
@@ -58,7 +57,7 @@ pub async fn authentication_v2(
 ) -> Xml<AuthenticationResponse> {
     println!("user: {:?}", user);
     println!("password: {:?}", password);
-    let hash = libpasta::hash_password(&password);
+    let hash = hash_password(&password);
     println!("hashed: {}", hash);
     println!("body: {:?}", body);
     let client = sqlx::query_as::<_, Client>("SELECT * FROM clients WHERE id = $1 AND password = $2")
@@ -73,6 +72,12 @@ pub async fn authentication_v2(
         scope: "/authenticationservices/v1".to_owned(),
         expires_in: 1800,
     })
+}
+
+pub fn hash_password(password: &str) -> String {
+    let hasher = libpasta::Config::with_primitive(
+        libpasta::primitives::Pbkdf2::new(650_000, &ring::pbkdf2::PBKDF2_HMAC_SHA256));
+    hasher.hash_password(password)
 }
 
 pub struct XmlEncBody(Bytes);

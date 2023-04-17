@@ -1,6 +1,6 @@
 use axum::{
     body::Body,
-    extract::{ConnectInfo, FromRef},
+    extract::ConnectInfo,
     http::{header::CONTENT_TYPE, method::Method, Request, StatusCode},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
@@ -14,11 +14,11 @@ use openssl::x509::{
     store::{X509Store, X509StoreBuilder},
     X509,
 };
-use std::{error, net::SocketAddr, path::PathBuf, time::Duration};
+use std::{error, net::SocketAddr, path::PathBuf};
 use tower::ServiceBuilder;
 
 use std::sync::Arc;
-use sqlx::postgres::PgPoolOptions;
+use citimock::config::create_connection_pool;
 
 use citimock::handlers::authentication::authentication_v2;
 
@@ -31,16 +31,7 @@ async fn main() {
     let key = citimock::certificates::utils::generate_test_key();
     println!("{:?}", key);
 
-    let db_connection_str = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:@127.0.0.1/citimock".to_string());
-    // setup connection pool
-    let pool = PgPoolOptions::new()
-        .max_connections(5)
-        .acquire_timeout(Duration::from_secs(3))
-        .connect(&db_connection_str)
-        .await
-        .expect("can't connect to database");
-
+    let pool = create_connection_pool("citimock").await;
     let app_state = AppState {
         pool,
     };

@@ -13,6 +13,7 @@ itertools = "0.10.5"
 libpasta = "0.1.2"
 openssl = "0.10.49"
 openssl-sys = "0.9.84"
+ring = "0.16.20"
 sqlx = { version = "0.6.3", features = ["runtime-tokio-native-tls", "any", "postgres"] }
 tokio = { version = "1.0", features = ["full"] }
 tokio-openssl = "0.6.3"
