@@ -1,4 +1,5 @@
 use crate::extractors::basic_auth::ExtractBasicAuth;
+use crate::AppState;
 use axum::{
     async_trait,
     body::{Body, Bytes},
@@ -6,18 +7,19 @@ use axum::{
     http::{header, HeaderValue, Request, StatusCode},
     response::{IntoResponse, Response},
 };
+use std::sync::Arc;
 use yaserde;
 use yaserde_derive::{YaDeserialize, YaSerialize};
-use crate::AppState;
-use std::sync::Arc;
 
 use libpasta;
 
 #[derive(Debug, YaDeserialize)]
-#[yaserde(prefix = "defaultns",
-          default_namesapce = "defaultns",
-          namespace = "defaultns: http://com.citi.citiconnect/services/types/oauthtoken/v1",
-          rename = "oAuthToken")]
+#[yaserde(
+    prefix = "defaultns",
+    default_namesapce = "defaultns",
+    namespace = "defaultns: http://com.citi.citiconnect/services/types/oauthtoken/v1",
+    rename = "oAuthToken"
+)]
 pub struct AuthenticationRequest {
     #[yaserde(attribute, rename = "grantType", prefix = "defaultns")]
     pub grant_type: String,
@@ -46,38 +48,41 @@ pub struct AuthenticationError {
     pub message: String,
 }
 
-#[derive(Debug, sqlx::FromRow)]
-struct Client { id: String, status: String }
-
 pub async fn authentication_v2(
     State(state): State<Arc<AppState>>,
     ExtractBasicAuth((user, password)): ExtractBasicAuth,
     Xml(body): Xml<AuthenticationRequest>,
     //XmlEncBody(body): XmlEncBody,
-) -> Xml<AuthenticationResponse> {
+) -> Result<Xml<AuthenticationResponse>, Response> {
     println!("user: {:?}", user);
-    println!("password: {:?}", password);
-    let hash = hash_password(&password);
-    println!("hashed: {}", hash);
     println!("body: {:?}", body);
-    let client = sqlx::query_as::<_, Client>("SELECT * FROM clients WHERE id = $1 AND password = $2")
-        .bind(user)
-        .bind(hash)
-        .fetch_one(&state.pool).await;
-    println!("{:?}", client);
-
-    Xml(AuthenticationResponse {
-        token_type: "client_credentials".to_owned(),
-        access_token: "thisistoken".to_owned(),
-        scope: "/authenticationservices/v1".to_owned(),
-        expires_in: 1800,
-    })
-}
-
-pub fn hash_password(password: &str) -> String {
-    let hasher = libpasta::Config::with_primitive(
-        libpasta::primitives::Pbkdf2::new(650_000, &ring::pbkdf2::PBKDF2_HMAC_SHA256));
-    hasher.hash_password(password)
+    match crate::services::client_service::get_client_by_id(&state.pool, &user).await {
+        Ok(client) => {
+            println!("{:?}", client);
+            if libpasta::verify_password(client.hash(), &password) {
+                Ok(Xml(AuthenticationResponse {
+                    token_type: "client_credentials".to_owned(),
+                    access_token: "thisistoken".to_owned(),
+                    scope: "/authenticationservices/v1".to_owned(),
+                    expires_in: 1800,
+                }))
+            } else {
+                Err(error_response(StatusCode::UNAUTHORIZED, "401", "UNAUTHORIZED").into_response())
+            }
+        }
+        Err(sqlx::Error::RowNotFound) => {
+            Err(error_response(StatusCode::FORBIDDEN, "403", "Client is forbidden").into_response())
+        }
+        Err(err) => {
+            println!("{:?}", err);
+            Err(error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "500",
+                "INTERNAL_SERVER_ERROR",
+            )
+            .into_response())
+        }
+    }
 }
 
 pub struct XmlEncBody(Bytes);
@@ -182,7 +187,7 @@ where
                 )],
                 yaserde::ser::to_string(&AuthenticationError {
                     code: "500".to_owned(),
-                    message: err.to_string(),
+                    message: err,
                 })
                 .unwrap(),
             )

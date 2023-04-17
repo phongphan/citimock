@@ -17,8 +17,8 @@ use openssl::x509::{
 use std::{error, net::SocketAddr, path::PathBuf};
 use tower::ServiceBuilder;
 
-use std::sync::Arc;
 use citimock::config::create_connection_pool;
+use std::sync::Arc;
 
 use citimock::handlers::authentication::authentication_v2;
 
@@ -32,9 +32,17 @@ async fn main() {
     println!("{:?}", key);
 
     let pool = create_connection_pool("citimock").await;
-    let app_state = AppState {
-        pool,
-    };
+
+    let client = citimock::models::client::Client::new(
+        "a-client",
+        "password",
+        citimock::models::client::ClientStatus::Active,
+    );
+    citimock::services::client_service::add_client(&pool, &client)
+        .await
+        .unwrap();
+
+    let app_state = AppState { pool };
     let shared_state = Arc::new(app_state);
 
     // openssl
@@ -83,9 +91,8 @@ async fn main() {
     tls_builder.set_verify(verify_mode);
     // openssl
 
-    let health_check_router = Router::new()
-        .route("/", get(handler));
-        //.with_state(Arc::clone(&shared_state));
+    let health_check_router = Router::new().route("/", get(handler));
+    //.with_state(Arc::clone(&shared_state));
 
     let authenticate_router = Router::new()
         .route(

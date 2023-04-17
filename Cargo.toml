@@ -14,11 +14,12 @@ libpasta = "0.1.2"
 openssl = "0.10.49"
 openssl-sys = "0.9.84"
 ring = "0.16.20"
-sqlx = { version = "0.6.3", features = ["runtime-tokio-native-tls", "any", "postgres"] }
+sqlx = { version = "0.6.3", features = ["runtime-tokio-native-tls", "any", "postgres", "chrono"] }
 tokio = { version = "1.0", features = ["full"] }
 tokio-openssl = "0.6.3"
 tower = "0.4.13"
 tower-http = { version = "0.4.0", features = ["map-request-body", "util"] }
+uuid = { version = "1.3.1", features = ["v4"] }
 yaserde = "0.8.0"
 yaserde_derive = "0.8.0"
 
