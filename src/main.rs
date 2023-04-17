@@ -1,6 +1,6 @@
 use axum::{
     body::Body,
-    extract::ConnectInfo,
+    extract::{ConnectInfo, FromRef},
     http::{header::CONTENT_TYPE, method::Method, Request, StatusCode},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
@@ -14,15 +14,37 @@ use openssl::x509::{
     store::{X509Store, X509StoreBuilder},
     X509,
 };
-use std::{error, net::SocketAddr, path::PathBuf};
+use std::{error, net::SocketAddr, path::PathBuf, time::Duration};
 use tower::ServiceBuilder;
 
+use std::sync::Arc;
+use sqlx::postgres::PgPoolOptions;
+
 use citimock::handlers::authentication::authentication_v2;
+
+use citimock::AppState;
+
+//type SharedState = Arc<AppState>;
 
 #[tokio::main]
 async fn main() {
     let key = citimock::certificates::utils::generate_test_key();
     println!("{:?}", key);
+
+    let db_connection_str = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://postgres:@127.0.0.1/citimock".to_string());
+    // setup connection pool
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .acquire_timeout(Duration::from_secs(3))
+        .connect(&db_connection_str)
+        .await
+        .expect("can't connect to database");
+
+    let app_state = AppState {
+        pool,
+    };
+    let shared_state = Arc::new(app_state);
 
     // openssl
     let mut tls_builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
@@ -70,13 +92,16 @@ async fn main() {
     tls_builder.set_verify(verify_mode);
     // openssl
 
-    let health_check_router = Router::new().route("/", get(handler));
+    let health_check_router = Router::new()
+        .route("/", get(handler));
+        //.with_state(Arc::clone(&shared_state));
 
     let authenticate_router = Router::new()
         .route(
             "/authenticationservices/v2/oauth/token",
             post(authentication_v2),
         )
+        .with_state(Arc::clone(&shared_state))
         .layer(ServiceBuilder::new().layer(middleware::from_fn(validate_content_type)));
 
     //let app = health_check_router.merge(authenticate_router);

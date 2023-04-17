@@ -2,12 +2,18 @@ use crate::extractors::basic_auth::ExtractBasicAuth;
 use axum::{
     async_trait,
     body::{Body, Bytes},
-    extract::FromRequest,
+    extract::{FromRequest, State},
     http::{header, HeaderValue, Request, StatusCode},
     response::{IntoResponse, Response},
 };
 use yaserde;
 use yaserde_derive::{YaDeserialize, YaSerialize};
+use crate::AppState;
+use std::sync::Arc;
+
+use core::fmt::Write;
+
+use libpasta;
 
 #[derive(Debug, YaDeserialize)]
 #[yaserde(prefix = "default",
@@ -41,14 +47,26 @@ pub struct AuthenticationError {
     pub message: String,
 }
 
+#[derive(Debug, sqlx::FromRow)]
+struct Client { id: String, status: String }
+
 pub async fn authentication_v2(
+    State(state): State<Arc<AppState>>,
     ExtractBasicAuth((user, password)): ExtractBasicAuth,
     Xml(body): Xml<AuthenticationRequest>,
     //XmlEncBody(body): XmlEncBody,
 ) -> Xml<AuthenticationResponse> {
     println!("user: {:?}", user);
     println!("password: {:?}", password);
+    let hash = libpasta::hash_password(&password);
+    println!("hashed: {}", hash);
     println!("body: {:?}", body);
+    let client = sqlx::query_as::<_, Client>("SELECT * FROM clients WHERE id = $1 AND password = $2")
+        .bind(user)
+        .bind(hash)
+        .fetch_one(&state.pool).await;
+    println!("{:?}", client);
+
     Xml(AuthenticationResponse {
         token_type: "client_credentials".to_owned(),
         access_token: "thisistoken".to_owned(),
