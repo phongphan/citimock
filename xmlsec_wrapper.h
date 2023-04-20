@@ -17,4 +17,6 @@
 #include <xmlsec/xmlsec.h>
 #include <xmlsec/xmltree.h>
 
+#include <xmlsec/openssl/crypto.h>
+
 #endif

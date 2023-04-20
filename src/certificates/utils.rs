@@ -1,5 +1,6 @@
 use openssl::asn1::Asn1Time;
 use openssl::bn::{BigNum, MsbOption};
+use openssl::hash::MessageDigest;
 use openssl::pkey::{PKey, Private};
 use openssl::rsa::Rsa;
 use openssl::x509::{X509Builder, X509Name, X509NameBuilder, X509};
@@ -37,6 +38,7 @@ fn generate_certificate(pkey: &PKey<Private>) -> Result<X509> {
     x509_builder.set_not_before(Asn1Time::days_from_now(0)?.as_ref())?;
     x509_builder.set_not_after(Asn1Time::days_from_now(90)?.as_ref())?;
     x509_builder.set_pubkey(pkey)?;
+    x509_builder.sign(pkey, MessageDigest::sha256())?;
 
     Ok(x509_builder.build())
 }

@@ -32,6 +32,7 @@ async fn main() {
 
     init_xmlsec();
     let tmpl = include_str!("../templates/signing.xml");
+    let enc_tmpl = include_str!("../templates/encryption.xml");
     //let pk = include_str!("../certs/server_pk.key");
     let my_doc = "<a><b></b></a>";
     let signed_doc = citimock::services::document_signing_service::sign(
@@ -105,11 +106,17 @@ async fn main() {
     let health_check_router = Router::new().route("/", get(handler));
     //.with_state(Arc::clone(&shared_state));
 
-    let ly = citimock::services::document_signing_service::SigningLayer::new(
+    let signing_layer = citimock::services::document_signing_service::SigningLayer::new(
         &key.private_key,
         "keyname",
         tmpl,
     );
+    let encryption_layer = citimock::services::document_encryption_service::EncryptionLayer::new(
+        &key.certificate,
+        "xmlenc-encrypt-certificate",
+        enc_tmpl,
+    );
+
     let authenticate_router = Router::new()
         .route(
             "/authenticationservices/v2/oauth/token",
@@ -119,7 +126,8 @@ async fn main() {
         .layer(
             ServiceBuilder::new()
                 .layer(middleware::from_fn(validate_content_type))
-                .layer(ly),
+                .layer(signing_layer)
+                .layer(encryption_layer),
         );
 
     //let app = health_check_router.merge(authenticate_router);

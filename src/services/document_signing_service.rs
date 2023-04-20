@@ -36,6 +36,7 @@ pub struct SigningLayer {
 
 impl SigningLayer {
     pub fn new(key: &str, key_name: &str, template: &str) -> Self {
+        println!("creating new SigningLayer");
         SigningLayer {
             key: Key {
                 key: key.to_owned(),
@@ -61,6 +62,7 @@ pub struct SigningService<T> {
 
 impl<T> SigningService<T> {
     pub fn new(inner: T, key: Key) -> Self {
+        println!("creating new SigningService");
         SigningService { inner, key }
     }
 }

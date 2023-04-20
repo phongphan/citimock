@@ -9,9 +9,14 @@ use crate::xmlsec::xmlParseDoc;
 use crate::xmlsec::xmlSecDSigCtxCreate;
 use crate::xmlsec::xmlSecDSigCtxDestroy;
 use crate::xmlsec::xmlSecDSigCtxPtr;
-use std::ffi::CString;
-
+use crate::xmlsec::xmlSecEncCtxCreate;
+use crate::xmlsec::xmlSecEncCtxDestroy;
+use crate::xmlsec::xmlSecEncCtxPtr;
+use crate::xmlsec::xmlSecKeysMngrCreate;
+use crate::xmlsec::xmlSecKeysMngrDestroy;
+use crate::xmlsec::xmlSecKeysMngrPtr;
 use std::ffi::CStr;
+use std::ffi::CString;
 use std::ptr;
 
 pub fn parse_xml(doc: &str) -> xmlDocPtr {
@@ -112,6 +117,60 @@ impl Drop for XmlBuffer {
     fn drop(&mut self) {
         if !self.ptr.is_null() {
             unsafe { xmlBufferFree(self.ptr) }
+        }
+    }
+}
+
+pub struct XmlSecKeysManager {
+    ptr: xmlSecKeysMngrPtr,
+}
+
+impl XmlSecKeysManager {
+    pub fn new() -> Self {
+        XmlSecKeysManager {
+            ptr: unsafe { xmlSecKeysMngrCreate() },
+        }
+    }
+
+    pub fn ptr(&self) -> xmlSecKeysMngrPtr {
+        self.ptr
+    }
+}
+
+impl Default for XmlSecKeysManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for XmlSecKeysManager {
+    fn drop(&mut self) {
+        if !self.ptr.is_null() {
+            unsafe { xmlSecKeysMngrDestroy(self.ptr) }
+        }
+    }
+}
+
+pub struct XmlSecEncCtx {
+    ptr: xmlSecEncCtxPtr,
+}
+
+impl XmlSecEncCtx {
+    pub fn new(manager: &XmlSecKeysManager) -> Self {
+        XmlSecEncCtx {
+            ptr: unsafe { xmlSecEncCtxCreate(manager.ptr()) },
+        }
+    }
+
+    pub fn ptr(&self) -> xmlSecEncCtxPtr {
+        self.ptr
+    }
+}
+
+impl Drop for XmlSecEncCtx {
+    fn drop(&mut self) {
+        if !self.ptr.is_null() {
+            unsafe { xmlSecEncCtxDestroy(self.ptr) }
         }
     }
 }
