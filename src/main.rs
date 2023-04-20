@@ -105,13 +105,22 @@ async fn main() {
     let health_check_router = Router::new().route("/", get(handler));
     //.with_state(Arc::clone(&shared_state));
 
+    let ly = citimock::services::document_signing_service::SigningLayer::new(
+        &key.private_key,
+        "keyname",
+        tmpl,
+    );
     let authenticate_router = Router::new()
         .route(
             "/authenticationservices/v2/oauth/token",
             post(authentication_v2),
         )
         .with_state(Arc::clone(&shared_state))
-        .layer(ServiceBuilder::new().layer(middleware::from_fn(validate_content_type)));
+        .layer(
+            ServiceBuilder::new()
+                .layer(middleware::from_fn(validate_content_type))
+                .layer(ly),
+        );
 
     //let app = health_check_router.merge(authenticate_router);
     let api_app = authenticate_router;

@@ -1,3 +1,8 @@
+use axum::body::Body;
+use axum::http::{header, HeaderValue, Request, StatusCode};
+use axum::response::{IntoResponse, Response};
+use std::task::{Context, Poll};
+
 use crate::services::document_service_utils::parse_xml;
 use crate::services::document_service_utils::serialize_node;
 use crate::services::document_service_utils::XMLDocWrapper;
@@ -12,6 +17,101 @@ use crate::xmlsec::{xmlDocGetRootElement, xmlSecDSigNs, xmlSecFindNode, xmlSecNo
 
 use std::ffi::CString;
 use std::ptr;
+
+use tower::{Layer, Service};
+
+use futures_util::future::BoxFuture;
+
+#[derive(Clone)]
+pub struct Key {
+    key: String,
+    key_name: String,
+    template: String,
+}
+
+#[derive(Clone)]
+pub struct SigningLayer {
+    key: Key,
+}
+
+impl SigningLayer {
+    pub fn new(key: &str, key_name: &str, template: &str) -> Self {
+        SigningLayer {
+            key: Key {
+                key: key.to_owned(),
+                key_name: key_name.to_owned(),
+                template: template.to_owned(),
+            },
+        }
+    }
+}
+
+impl<S> Layer<S> for SigningLayer {
+    type Service = SigningService<S>;
+
+    fn layer(&self, service: S) -> Self::Service {
+        SigningService::new(service, self.key.clone())
+    }
+}
+
+pub struct SigningService<T> {
+    inner: T,
+    key: Key,
+}
+
+impl<T> SigningService<T> {
+    pub fn new(inner: T, key: Key) -> Self {
+        SigningService { inner, key }
+    }
+}
+
+impl<S> Service<Request<Body>> for SigningService<S>
+where
+    S: Service<Request<Body>, Response = Response> + Send + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    // `BoxFuture` is a type alias for `Pin<Box<dyn Future + Send + 'a>>`
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, request: Request<Body>) -> Self::Future {
+        let key = self.key.clone();
+        let future = self.inner.call(request);
+        Box::pin(async move {
+            let response: Response = future.await?;
+            let (_parts, body) = response.into_parts();
+            let bytes = hyper::body::to_bytes(body)
+                .await
+                .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response())
+                .unwrap();
+
+            let xml = std::str::from_utf8(&bytes).unwrap();
+            let signed_doc = sign(&key.template, &key.key, &key.key_name, xml).unwrap();
+            Ok((
+                [(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static("application/xml"),
+                )],
+                signed_doc,
+            )
+                .into_response())
+        })
+    }
+}
+
+impl<T: Clone> Clone for SigningService<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            key: self.key.clone(),
+        }
+    }
+}
 
 pub fn sign(template: &str, key: &str, key_name: &str, xml: &str) -> Result<String, String> {
     unsafe {
