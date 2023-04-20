@@ -14,7 +14,7 @@ use openssl::x509::{
     store::{X509Store, X509StoreBuilder},
     X509,
 };
-use std::{error, net::SocketAddr, path::PathBuf};
+use std::{error, net::SocketAddr, path::PathBuf, ptr};
 use tower::ServiceBuilder;
 
 use citimock::config::create_connection_pool;
@@ -28,8 +28,19 @@ use citimock::AppState;
 
 #[tokio::main]
 async fn main() {
-    let key = citimock::certificates::utils::generate_test_key();
-    println!("{:?}", key);
+    let key = citimock::certificates::utils::generate_test_key().unwrap();
+
+    init_xmlsec();
+    let tmpl = include_str!("../templates/signing.xml");
+    //let pk = include_str!("../certs/server_pk.key");
+    let my_doc = "<a><b></b></a>";
+    let signed_doc = citimock::services::document_signing_service::sign(
+        tmpl,
+        &key.private_key,
+        "testkey",
+        my_doc,
+    );
+    println!("{:?}", signed_doc);
 
     let pool = create_connection_pool("citimock").await;
 
@@ -121,6 +132,28 @@ async fn main() {
         futures_util::future::join(api_server, healthz_server).await;
     api_server_res.unwrap();
     healthz_server_res.unwrap();
+}
+
+fn init_xmlsec() {
+    unsafe {
+        citimock::xmlsec::xmlInitParser();
+        citimock::xmlsec::xmlSubstituteEntitiesDefault(1);
+
+        /* Init xmlsec library */
+        if citimock::xmlsec::xmlSecInit() < 0 {
+            panic!("Error: xmlsec initialization failed.");
+        }
+
+        /* Init crypto library */
+        if citimock::xmlsec::xmlSecOpenSSLAppInit(ptr::null_mut()) < 0 {
+            panic!("Error: crypto initialization failed.");
+        }
+
+        /* Init xmlsec-crypto library */
+        if citimock::xmlsec::xmlSecOpenSSLInit() < 0 {
+            panic!("Error: xmlsec-crypto initialization failed.");
+        }
+    }
 }
 
 fn x509_slurp(path_buf: PathBuf) -> Result<X509, Box<dyn error::Error>> {
