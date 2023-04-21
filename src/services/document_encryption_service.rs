@@ -111,7 +111,7 @@ where
                 .unwrap();
 
             let xml = std::str::from_utf8(&bytes).unwrap();
-            let signed_doc = encrypt(
+            let encrypted_doc = encrypt(
                 &certificate.template,
                 &certificate.certificate,
                 &certificate.certificate_name,
@@ -123,7 +123,7 @@ where
                     header::CONTENT_TYPE,
                     HeaderValue::from_static("application/xml"),
                 )],
-                signed_doc,
+                encrypted_doc,
             )
                 .into_response())
         })
