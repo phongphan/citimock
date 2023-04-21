@@ -79,6 +79,12 @@ impl XmlSecDSigCtxWrapper {
         }
     }
 
+    pub fn new_with_manager(manager: &XmlSecKeysManager) -> Self {
+        XmlSecDSigCtxWrapper {
+            ptr: unsafe { xmlSecDSigCtxCreate(manager.ptr()) },
+        }
+    }
+
     pub fn ptr(&self) -> xmlSecDSigCtxPtr {
         self.ptr
     }

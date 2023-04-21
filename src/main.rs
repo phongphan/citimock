@@ -34,7 +34,13 @@ async fn main() {
     let tmpl = include_str!("../templates/signing.xml");
     let enc_tmpl = include_str!("../templates/encryption.xml");
     //let pk = include_str!("../certs/server_pk.key");
-    let my_doc = "<oAuthToken xmlns=\"http://com.citi.citiconnect/services/types/oauthtoken/v1\"><a></a></oAuthToken>";
+    let my_doc = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<oAuthToken xmlns=\"http://com.citi.citiconnect/services/types/oauthtoken/v1\">
+  <grantType>client_credentials</grantType>
+  <scope>/authenticationservices/v1</scope>
+  <sourceApplication>CCF</sourceApplication>
+</oAuthToken>";
+
     let signed_doc = citimock::services::document_signing_service::sign(
         tmpl,
         &key.private_key,
@@ -127,6 +133,11 @@ async fn main() {
         &key.private_key,
         "xmlenc-decrypt-key",
     );
+    let verifier_layer =
+        citimock::services::document_signature_verifier_service::VerifierLayer::new(
+            &key.certificate,
+            "xmlenc-verifier-certificate",
+        );
 
     let authenticate_router = Router::new()
         .route(
@@ -138,6 +149,7 @@ async fn main() {
             ServiceBuilder::new()
                 .layer(middleware::from_fn(validate_content_type))
                 .layer(decryption_layer)
+                .layer(verifier_layer)
                 .layer(signing_layer)
                 .layer(encryption_layer),
         );
