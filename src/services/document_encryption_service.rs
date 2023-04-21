@@ -193,7 +193,7 @@ pub fn encrypt(
             return Err("failed to adopt encryption certificate".to_owned());
         }
 
-        let ctx = XmlSecEncCtx::new(&manager); // FIXME: xmlSecEncCtxCreate(manager.ptr());
+        let ctx = XmlSecEncCtx::new(&manager);
         if ctx.ptr().is_null() {
             return Err("cannot create encryption context".to_owned());
         }
