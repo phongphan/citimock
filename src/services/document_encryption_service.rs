@@ -1,4 +1,5 @@
 use crate::services::document_service_utils::serialize_node;
+use crate::services::document_service_utils::SessionCipher;
 use crate::services::document_service_utils::XMLDocWrapper;
 use crate::services::document_service_utils::XmlSecEncCtx;
 use crate::services::document_service_utils::XmlSecKeysManager;
@@ -18,7 +19,9 @@ use crate::xmlsec::xmlSecOpenSSLAppDefaultKeysMngrAdoptKey;
 use crate::xmlsec::xmlSecOpenSSLAppDefaultKeysMngrInit;
 use crate::xmlsec::xmlSecOpenSSLAppKeyCertLoadMemory;
 use crate::xmlsec::xmlSecOpenSSLAppKeyLoadMemory;
+use crate::xmlsec::xmlSecOpenSSLKeyDataAesGetKlass;
 use crate::xmlsec::xmlSecOpenSSLKeyDataDesGetKlass;
+use crate::xmlsec::XMLSEC_KEYINFO_FLAGS_LAX_KEY_SEARCH;
 use axum::body::Body;
 use axum::http::{header, HeaderValue, Request, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -146,7 +149,7 @@ pub fn encrypt(
             return Err("unable to parse XML template".to_owned());
         }
 
-        let manager = XmlSecKeysManager::new(); //xmlSecKeysMngrCreate();
+        let manager = XmlSecKeysManager::new();
         if manager.ptr().is_null() {
             return Err("cannot create key manager".to_owned());
         }
@@ -195,10 +198,14 @@ pub fn encrypt(
             return Err("cannot create encryption context".to_owned());
         }
 
-        (*ctx.ptr()).encKey = create_xmlsec_key();
+        (*ctx.ptr()).encKey = create_xmlsec_key(SessionCipher::SessionCipherDes3cbc);
         if (*ctx.ptr()).encKey.is_null() {
             return Err("cannot create encryption key".to_owned());
         }
+
+        // allow unnamed cert to be picked up
+        (*ctx.ptr()).keyInfoReadCtx.flags |= XMLSEC_KEYINFO_FLAGS_LAX_KEY_SEARCH;
+        (*ctx.ptr()).keyInfoWriteCtx.flags |= XMLSEC_KEYINFO_FLAGS_LAX_KEY_SEARCH;
 
         let enc_data_node = xmlSecFindNode(
             template_root,
@@ -217,24 +224,29 @@ pub fn encrypt(
     }
 }
 
-fn create_xmlsec_key() -> xmlSecKeyPtr {
-    /*switch (cipher_type) {
-    case SESSION_CIPHER_AES128CBC:
-        return xmlSecKeyGenerate(xmlSecKeyDataAesId, 128, xmlSecKeyDataTypeSession);
-    case SESSION_CIPHER_AES192CBC:
-        return xmlSecKeyGenerate(xmlSecKeyDataAesId, 192, xmlSecKeyDataTypeSession);
-    case SESSION_CIPHER_AES256CBC:
-        return xmlSecKeyGenerate(xmlSecKeyDataAesId, 256, xmlSecKeyDataTypeSession);
-    case SESSION_CIPHER_DES3CBC:
-        return xmlSecKeyGenerate(xmlSecKeyDataDesId, 192, xmlSecKeyDataTypeSession);
-    default:
-        return NULL;
-    }*/
+fn create_xmlsec_key(cipher: SessionCipher) -> xmlSecKeyPtr {
     unsafe {
-        xmlSecKeyGenerate(
-            xmlSecOpenSSLKeyDataDesGetKlass(),
-            192,
-            xmlSecKeyDataTypeSession,
-        )
+        match cipher {
+            SessionCipher::SessionCipherAes128cbc => xmlSecKeyGenerate(
+                xmlSecOpenSSLKeyDataAesGetKlass(),
+                128,
+                xmlSecKeyDataTypeSession,
+            ),
+            SessionCipher::SessionCipherAes192cbc => xmlSecKeyGenerate(
+                xmlSecOpenSSLKeyDataAesGetKlass(),
+                192,
+                xmlSecKeyDataTypeSession,
+            ),
+            SessionCipher::SessionCipherAes256cbc => xmlSecKeyGenerate(
+                xmlSecOpenSSLKeyDataAesGetKlass(),
+                256,
+                xmlSecKeyDataTypeSession,
+            ),
+            SessionCipher::SessionCipherDes3cbc => xmlSecKeyGenerate(
+                xmlSecOpenSSLKeyDataDesGetKlass(),
+                192,
+                xmlSecKeyDataTypeSession,
+            ),
+        }
     }
 }

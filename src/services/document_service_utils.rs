@@ -19,6 +19,13 @@ use std::ffi::CStr;
 use std::ffi::CString;
 use std::ptr;
 
+pub enum SessionCipher {
+    SessionCipherAes128cbc,
+    SessionCipherAes192cbc,
+    SessionCipherAes256cbc,
+    SessionCipherDes3cbc,
+}
+
 pub fn parse_xml(doc: &str) -> xmlDocPtr {
     let cstr = CString::new(doc).unwrap();
     unsafe { xmlParseDoc(cstr.as_ptr() as *const u8) }
