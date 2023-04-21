@@ -2,10 +2,8 @@ use crate::extractors::basic_auth::ExtractBasicAuth;
 use crate::extractors::xml::Xml;
 use crate::AppState;
 use axum::{
-    async_trait,
-    body::{Body, Bytes},
-    extract::{FromRequest, State},
-    http::{header, HeaderValue, Request, StatusCode},
+    extract::State,
+    http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
 use std::sync::Arc;
@@ -83,26 +81,6 @@ pub async fn authentication_v2(
             )
             .into_response())
         }
-    }
-}
-
-pub struct XmlEncBody(Bytes);
-
-#[async_trait]
-impl<S> FromRequest<S, Body> for XmlEncBody
-where
-    S: Send + Sync,
-{
-    type Rejection = Response;
-
-    async fn from_request(req: Request<Body>, state: &S) -> Result<Self, Self::Rejection> {
-        let body = Bytes::from_request(req, state)
-            .await
-            .map_err(|err| err.into_response())?;
-
-        //do_thing_with_request_body(body.clone());
-
-        Ok(Self(body))
     }
 }
 
