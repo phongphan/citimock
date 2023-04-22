@@ -203,12 +203,15 @@ pub fn encrypt(
 
         if let Ok(certificate_name) = CString::new(certificate_name) {
             if xmlSecKeySetName(app_key, certificate_name.as_ptr() as *mut u8) < 0 {
+                xmlSecKeyDestroy(app_key);
                 return Err("failed to set key name for key".to_owned());
             }
         } else {
+            xmlSecKeyDestroy(app_key);
             return Err("failed to set key name".to_owned());
         }
 
+        // key manager is responsible to release the app_key
         if xmlSecOpenSSLAppDefaultKeysMngrAdoptKey(manager.ptr(), app_key) < 0 {
             xmlSecKeyDestroy(app_key);
             return Err("failed to adopt encryption certificate".to_owned());
