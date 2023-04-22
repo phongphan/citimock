@@ -1,16 +1,17 @@
 use crate::extractors::basic_auth::ExtractBasicAuth;
 use crate::extractors::xml::Xml;
+use crate::services::jwt_service::encrypt_token;
 use crate::AppState;
 use axum::{
     extract::State,
     http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
+use libpasta;
 use std::sync::Arc;
+use std::time::Duration;
 use yaserde;
 use yaserde_derive::{YaDeserialize, YaSerialize};
-
-use libpasta;
 
 #[derive(Debug, YaDeserialize)]
 #[yaserde(
@@ -59,9 +60,11 @@ pub async fn authentication_v2(
         Ok(client) => {
             println!("{:?}", client);
             if libpasta::verify_password(client.hash(), &password) {
+                let token = encrypt_token(&state.jwt_pub, &user, "2", Duration::from_secs(30 * 60))
+                    .unwrap();
                 Ok(Xml(AuthenticationResponse {
                     token_type: "client_credentials".to_owned(),
-                    access_token: "thisistoken".to_owned(),
+                    access_token: token,
                     scope: "/authenticationservices/v1".to_owned(),
                     expires_in: 1800,
                 }))

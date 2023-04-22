@@ -67,7 +67,11 @@ async fn main() {
         .await
         .unwrap();
 
-    let app_state = AppState { pool };
+    let app_state = AppState {
+        pool,
+        jwt_pri: include_str!("../certs/server_pk.key").to_owned(),
+        jwt_pub: include_str!("../certs/server_pub.pem").to_owned(),
+    };
     let shared_state = Arc::new(app_state);
 
     // openssl
