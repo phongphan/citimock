@@ -107,7 +107,7 @@ where
             println!("entering encryptiion service");
             let response: Response = future.await?;
             println!("encrypting response");
-            let (parts, body) = response.into_parts();
+            let (mut parts, body) = response.into_parts();
             let bytes = match hyper::body::to_bytes(body).await {
                 Ok(v) => v,
                 Err(err) => {
@@ -146,6 +146,7 @@ where
                 }
             };
 
+            _ = parts.headers.remove("content-length");
             Ok(Response::from_parts(parts, body::boxed(encrypted_doc)))
         })
     }
