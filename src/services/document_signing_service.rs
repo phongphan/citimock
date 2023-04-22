@@ -1,8 +1,4 @@
-use axum::body::Body;
-use axum::http::{header, HeaderValue, Request, StatusCode};
-use axum::response::{IntoResponse, Response};
-use std::task::{Context, Poll};
-
+use crate::extractors::error_response;
 use crate::services::document_service_utils::parse_xml;
 use crate::services::document_service_utils::serialize_node;
 use crate::services::document_service_utils::XMLDocWrapper;
@@ -14,13 +10,15 @@ use crate::xmlsec::xmlSecKeyDataFormat_xmlSecKeyDataFormatPem;
 use crate::xmlsec::xmlSecKeySetName;
 use crate::xmlsec::xmlSecOpenSSLAppKeyLoadMemory;
 use crate::xmlsec::{xmlDocGetRootElement, xmlSecDSigNs, xmlSecFindNode, xmlSecNodeSignature};
-
+use axum::body;
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
+use axum::response::Response;
+use futures_util::future::BoxFuture;
 use std::ffi::CString;
 use std::ptr;
-
+use std::task::{Context, Poll};
 use tower::{Layer, Service};
-
-use futures_util::future::BoxFuture;
 
 #[derive(Clone)]
 pub struct Key {
@@ -85,23 +83,44 @@ where
         let key = self.key.clone();
         let future = self.inner.call(request);
         Box::pin(async move {
+            println!("entering singing service");
             let response: Response = future.await?;
-            let (_parts, body) = response.into_parts();
-            let bytes = hyper::body::to_bytes(body)
-                .await
-                .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response())
-                .unwrap();
+            println!("signing response");
+            let (parts, body) = response.into_parts();
+            let bytes = match hyper::body::to_bytes(body).await {
+                Ok(v) => v,
+                Err(err) => {
+                    return Ok(error_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "INTERNAL_SERVER_ERROR",
+                        &err.to_string(),
+                    ))
+                }
+            };
 
-            let xml = std::str::from_utf8(&bytes).unwrap();
-            let signed_doc = sign(&key.template, &key.key, &key.key_name, xml).unwrap();
-            Ok((
-                [(
-                    header::CONTENT_TYPE,
-                    HeaderValue::from_static("application/xml"),
-                )],
-                signed_doc,
-            )
-                .into_response())
+            let xml = match std::str::from_utf8(&bytes) {
+                Ok(v) => v,
+                Err(err) => {
+                    return Ok(error_response(
+                        StatusCode::BAD_REQUEST,
+                        "BAD_REQUEST",
+                        &err.to_string(),
+                    ))
+                }
+            };
+
+            let signed_doc = match sign(&key.template, &key.key, &key.key_name, xml) {
+                Ok(v) => v,
+                Err(err) => {
+                    return Ok(error_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "INTERNAL_SERVER_ERROR",
+                        &err,
+                    ))
+                }
+            };
+
+            Ok(Response::from_parts(parts, body::boxed(signed_doc)))
         })
     }
 }

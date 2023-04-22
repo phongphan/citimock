@@ -1,33 +1,26 @@
+use crate::extractors::error_response;
 use crate::services::document_service_utils::serialize_node;
-use crate::xmlsec::xmlSecEncCtxDecrypt;
-use crate::xmlsec::xmlSecKeyDataFormat_xmlSecKeyDataFormatPem;
-use crate::xmlsec::xmlSecKeySetName;
-use axum::response::IntoResponse;
-use std::ffi::CString;
-
 use crate::services::document_service_utils::XMLDocWrapper;
 use crate::services::document_service_utils::XmlSecEncCtx;
 use crate::services::document_service_utils::XmlSecKeysManager;
 use crate::xmlsec::xmlDocGetRootElement;
 use crate::xmlsec::xmlNodePtr;
-
+use crate::xmlsec::xmlSecEncCtxDecrypt;
 use crate::xmlsec::xmlSecEncNs;
 use crate::xmlsec::xmlSecFindNode;
-
+use crate::xmlsec::xmlSecKeyDataFormat_xmlSecKeyDataFormatPem;
 use crate::xmlsec::xmlSecKeyDestroy;
-
+use crate::xmlsec::xmlSecKeySetName;
 use crate::xmlsec::xmlSecNodeEncryptedData;
 use crate::xmlsec::xmlSecOpenSSLAppDefaultKeysMngrAdoptKey;
 use crate::xmlsec::xmlSecOpenSSLAppDefaultKeysMngrInit;
-
 use crate::xmlsec::xmlSecOpenSSLAppKeyLoadMemory;
-
 use crate::xmlsec::XMLSEC_KEYINFO_FLAGS_LAX_KEY_SEARCH;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::response::Response;
 use futures_util::future::BoxFuture;
-
+use std::ffi::CString;
 use std::ptr;
 use std::task::{Context, Poll};
 use tower::{Layer, Service};
@@ -102,14 +95,38 @@ where
         let mut inner = self.inner.clone();
         let key = self.key.clone();
         Box::pin(async move {
+            println!("decrypting request");
             let (parts, body) = request.into_parts();
-            let bytes = hyper::body::to_bytes(body)
-                .await
-                .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response())
-                .unwrap();
-
-            let xml = std::str::from_utf8(&bytes).unwrap();
-            let decrypted_doc = decrypt(&key.key, &key.key_name, xml).unwrap();
+            let bytes = match hyper::body::to_bytes(body).await {
+                Ok(v) => v,
+                Err(err) => {
+                    return Ok(error_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "INTERNAL_SERVER_ERROR",
+                        &err.to_string(),
+                    ))
+                }
+            };
+            let xml = match std::str::from_utf8(&bytes) {
+                Ok(v) => v,
+                Err(err) => {
+                    return Ok(error_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "INTERNAL_SERVER_ERROR",
+                        &err.to_string(),
+                    ))
+                }
+            };
+            let decrypted_doc = match decrypt(&key.key, &key.key_name, xml) {
+                Ok(v) => v,
+                Err(err) => {
+                    return Ok(error_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "INTERNAL_SERVER_ERROR",
+                        &err,
+                    ))
+                }
+            };
 
             let request = Request::from_parts(parts, decrypted_doc.into());
             inner.call(request).await

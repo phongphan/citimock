@@ -1,3 +1,4 @@
+use crate::extractors::error_response;
 use crate::services::document_service_utils::serialize_node;
 use crate::services::document_service_utils::XMLDocWrapper;
 use crate::services::document_service_utils::XmlSecDSigCtxWrapper;
@@ -18,7 +19,7 @@ use crate::xmlsec::XMLSEC_KEYINFO_FLAGS_LAX_KEY_SEARCH;
 use crate::xmlsec::{xmlDocGetRootElement, xmlSecDSigNs, xmlSecFindNode, xmlSecNodeSignature};
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 use futures_util::future::BoxFuture;
 use std::ffi::CString;
 use std::ptr;
@@ -95,22 +96,60 @@ where
         let mut inner = self.inner.clone();
         let certificate = self.certificate.clone();
         Box::pin(async move {
+            println!("verifying request");
             let (parts, body) = request.into_parts();
-            let bytes = hyper::body::to_bytes(body)
-                .await
-                .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response())
-                .unwrap();
+            let bytes = match hyper::body::to_bytes(body).await {
+                Ok(v) => v,
+                Err(err) => {
+                    return Ok(error_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "INTERNAL_SERVER_ERROR",
+                        &err.to_string(),
+                    ))
+                }
+            };
 
-            let xml = std::str::from_utf8(&bytes).unwrap();
-            let verified =
-                verify_signature(&certificate.certificate, &certificate.certificate_name, xml)
-                    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err).into_response())
-                    .unwrap();
+            let xml = match std::str::from_utf8(&bytes) {
+                Ok(v) => v,
+                Err(err) => {
+                    return Ok(error_response(
+                        StatusCode::BAD_REQUEST,
+                        "BAD_REQUEST",
+                        &err.to_string(),
+                    ))
+                }
+            };
+
+            let verified = match verify_signature(
+                &certificate.certificate,
+                &certificate.certificate_name,
+                xml,
+            ) {
+                Ok(v) => v,
+                Err(err) => {
+                    return Ok(error_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "INTERNAL_SERVER_ERROR",
+                        &err,
+                    ))
+                }
+            };
+
             if !verified {
-                panic!("verify signature failed");
-            }
+                return Ok(error_response(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    "invalid signature",
+                ));
+            };
 
-            let doc = remove_signature(xml).unwrap();
+            let doc = match remove_signature(xml) {
+                Ok(v) => v,
+                Err(err) => {
+                    return Ok(error_response(StatusCode::BAD_REQUEST, "BAD_REQUEST", &err))
+                }
+            };
+
             let request = Request::from_parts(parts, doc.into());
             inner.call(request).await
         })

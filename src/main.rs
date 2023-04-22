@@ -119,21 +119,23 @@ async fn main() {
     let health_check_router = Router::new().route("/", get(handler));
     //.with_state(Arc::clone(&shared_state));
 
-    let signing_layer = citimock::services::document_signing_service::SigningLayer::new(
+    let signing_response_layer = citimock::services::document_signing_service::SigningLayer::new(
         &key.private_key,
         "keyname",
         tmpl,
     );
-    let encryption_layer = citimock::services::document_encryption_service::EncryptionLayer::new(
-        &key.certificate,
-        "xmlenc-encrypt-certificate",
-        enc_tmpl,
-    );
-    let decryption_layer = citimock::services::document_decryption_service::DecryptionLayer::new(
-        &key.private_key,
-        "xmlenc-decrypt-key",
-    );
-    let verifier_layer =
+    let encrypt_response_layer =
+        citimock::services::document_encryption_service::EncryptionLayer::new(
+            &key.certificate,
+            "xmlenc-encrypt-certificate",
+            enc_tmpl,
+        );
+    let decrypt_request_layer =
+        citimock::services::document_decryption_service::DecryptionLayer::new(
+            &key.private_key,
+            "xmlenc-decrypt-key",
+        );
+    let verify_request_layer =
         citimock::services::document_signature_verifier_service::VerifierLayer::new(
             &key.certificate,
             "xmlenc-verifier-certificate",
@@ -148,10 +150,10 @@ async fn main() {
         .layer(
             ServiceBuilder::new()
                 .layer(middleware::from_fn(validate_content_type))
-                .layer(decryption_layer)
-                .layer(verifier_layer)
-                .layer(signing_layer)
-                .layer(encryption_layer),
+                .layer(encrypt_response_layer)
+                .layer(signing_response_layer)
+                .layer(decrypt_request_layer)
+                .layer(verify_request_layer),
         );
 
     //let app = health_check_router.merge(authenticate_router);
