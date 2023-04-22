@@ -176,6 +176,6 @@ pub fn sign(template: &str, key: &str, key_name: &str, xml: &str) -> Result<Stri
             return Err("signature failed".to_owned());
         }
 
-        Ok(serialize_node(&(doc.ptr() as xmlNodePtr)).unwrap())
+        serialize_node(&(doc.ptr() as xmlNodePtr)).map_err(|err| err.to_string())
     }
 }

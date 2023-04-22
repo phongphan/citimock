@@ -241,7 +241,7 @@ pub fn encrypt(
             return Err("failed to encrypt xml body".to_owned());
         }
 
-        Ok(serialize_node(&(doc.ptr() as xmlNodePtr)).unwrap())
+        serialize_node(&(doc.ptr() as xmlNodePtr)).map_err(|err| err.to_string())
     }
 }
 

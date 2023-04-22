@@ -194,6 +194,6 @@ pub fn decrypt(key: &str, key_name: &str, xml: &str) -> Result<String, String> {
             return Err("failed to decrypt xml body".to_owned());
         }
 
-        Ok(serialize_node(&(doc.ptr() as xmlNodePtr)).unwrap())
+        serialize_node(&(doc.ptr() as xmlNodePtr)).map_err(|err| err.to_string())
     }
 }

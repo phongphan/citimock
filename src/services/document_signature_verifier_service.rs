@@ -242,6 +242,6 @@ fn remove_signature(xml: &str) -> Result<String, String> {
         xmlUnlinkNode(sig_node);
         xmlFreeNode(sig_node);
 
-        Ok(serialize_node(&(doc.ptr() as xmlNodePtr)).unwrap())
+        serialize_node(&(doc.ptr() as xmlNodePtr)).map_err(|err| err.to_string())
     }
 }
