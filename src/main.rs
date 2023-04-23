@@ -72,7 +72,7 @@ async fn main() {
         jwt_pri: include_str!("../certs/server_pk.key").to_owned(),
         jwt_pub: include_str!("../certs/server_pub.pem").to_owned(),
     };
-    let shared_state = Arc::new(app_state);
+    let shared_state = Arc::new(app_state.clone());
 
     // openssl
     let mut tls_builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
@@ -145,6 +145,9 @@ async fn main() {
             "xmlenc-verifier-certificate",
         );
 
+    let authentication_layer =
+        citimock::services::authentication_layer::AuthenticationLayer::new(app_state.clone());
+
     let authenticate_router = Router::new()
         .route(
             "/authenticationservices/v2/oauth/token",
@@ -153,6 +156,7 @@ async fn main() {
         .with_state(Arc::clone(&shared_state))
         .layer(
             ServiceBuilder::new()
+                .layer(authentication_layer)
                 .layer(middleware::from_fn(validate_content_type))
                 .layer(encrypt_response_layer)
                 .layer(signing_response_layer)

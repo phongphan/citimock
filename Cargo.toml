@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = { version = "0.6.12", features = ["macros"] }
+axum = { version = "0.6.12", features = ["headers", "macros"] }
 axum-server = { version = "0.4.7", features = ["tls-openssl"] }
 base64 = "0.21.0"
 futures-util = "0.3.28"
@@ -15,6 +15,7 @@ libpasta = "0.1.2"
 openssl = "0.10.49"
 openssl-sys = "0.9.84"
 ring = "0.16.20"
+serde = "1.0.160"
 sqlx = { version = "0.6.3", features = ["runtime-tokio-native-tls", "any", "postgres", "chrono"] }
 tokio = { version = "1.0", features = ["full"] }
 tokio-openssl = "0.6.3"

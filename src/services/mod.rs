@@ -1,3 +1,4 @@
+pub mod authentication_layer;
 pub mod client_service;
 pub mod document_decryption_service;
 pub mod document_encryption_service;
