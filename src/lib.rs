@@ -5,6 +5,7 @@ pub mod certificates;
 pub mod config;
 pub mod extractors;
 pub mod handlers;
+pub mod layers;
 pub mod models;
 pub mod services;
 

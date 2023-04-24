@@ -8,7 +8,12 @@ use axum::{
 use axum_server::tls_openssl::OpenSSLConfig;
 use citimock::config::create_connection_pool;
 use citimock::handlers::authentication::authentication_v2;
-use citimock::services::authentication_check_layer::authentication_check_layer;
+use citimock::layers::authentication::AuthenticationLayer;
+use citimock::layers::authentication_check::authentication_check_layer;
+use citimock::layers::document_decryption::DecryptionLayer;
+use citimock::layers::document_encryption::EncryptionLayer;
+use citimock::layers::document_signature_verifier::VerifierLayer;
+use citimock::layers::document_signing::SigningLayer;
 use citimock::services::cert_manager_service::CertManager;
 use citimock::AppState;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod, SslVerifyMode};
@@ -37,14 +42,10 @@ async fn main() {
   <sourceApplication>CCF</sourceApplication>
 </oAuthToken>";
 
-    let signed_doc = citimock::services::document_signing_service::sign(
-        tmpl,
-        &key.private_key,
-        "testkey",
-        my_doc,
-    );
+    let signed_doc =
+        citimock::layers::document_signing::sign(tmpl, &key.private_key, "testkey", my_doc);
     //println!("signed: {}", signed_doc.unwrap());
-    let enc_doc = citimock::services::document_encryption_service::encrypt(
+    let enc_doc = citimock::layers::document_encryption::encrypt(
         enc_tmpl,
         &key.certificate,
         "testcert",
@@ -123,30 +124,13 @@ async fn main() {
     let health_check_router = Router::new().route("/", get(handler));
     //.with_state(Arc::clone(&shared_state));
 
-    let signing_response_layer = citimock::services::document_signing_service::SigningLayer::new(
-        &key.private_key,
-        "keyname",
-        tmpl,
-    );
+    let signing_response_layer = SigningLayer::new(&key.private_key, "keyname", tmpl);
     let encrypt_response_layer =
-        citimock::services::document_encryption_service::EncryptionLayer::new(
-            &key.certificate,
-            "xmlenc-encrypt-certificate",
-            enc_tmpl,
-        );
-    let decrypt_request_layer =
-        citimock::services::document_decryption_service::DecryptionLayer::new(
-            &key.private_key,
-            "xmlenc-decrypt-key",
-        );
-    let verify_request_layer =
-        citimock::services::document_signature_verifier_service::VerifierLayer::new(
-            &key.certificate,
-            "xmlenc-verifier-certificate",
-        );
+        EncryptionLayer::new(&key.certificate, "xmlenc-encrypt-certificate", enc_tmpl);
+    let decrypt_request_layer = DecryptionLayer::new(&key.private_key, "xmlenc-decrypt-key");
+    let verify_request_layer = VerifierLayer::new(&key.certificate, "xmlenc-verifier-certificate");
 
-    let authentication_layer =
-        citimock::services::authentication_layer::AuthenticationLayer::new(app_state.clone());
+    let authentication_layer = AuthenticationLayer::new(app_state.clone());
 
     let authenticate_router = Router::new()
         .route(
