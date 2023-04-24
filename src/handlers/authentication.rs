@@ -7,6 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
     Extension,
 };
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use yaserde;
@@ -47,7 +48,7 @@ pub struct AuthenticationError {
     pub message: String,
 }
 
-pub async fn authentication_v2(
+pub async fn oauth_token_v2(
     State(state): State<Arc<AppState>>,
     Extension(session): Extension<SessionState>,
     Xml(body): Xml<AuthenticationRequest>,
@@ -61,10 +62,58 @@ pub async fn authentication_v2(
         );
     }
 
+    let mut claims = HashMap::new();
+    claims.insert("auth_version", "2");
+    claims.insert("scope", &body.scope);
+    claims.insert("grant_type", &body.grant_type);
+    claims.insert("permissions", "statement_initiate statement_request");
+
     match encrypt_token(
         &state.jwt_pub,
         &session.client_id,
-        "2",
+        &claims,
+        Duration::from_secs(30 * 60),
+    ) {
+        Ok(token) => {
+            println!("token: {}", token);
+            Ok(Xml(AuthenticationResponse {
+                token_type: "client_credentials".to_owned(),
+                access_token: token,
+                scope: "/authenticationservices/v1".to_owned(),
+                expires_in: 1800,
+            }))
+        }
+        Err(err) => Err(error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "500",
+            err.to_string().as_str(),
+        )
+        .into_response()),
+    }
+}
+
+pub async fn oauth_token_v3(
+    State(state): State<Arc<AppState>>,
+    Extension(session): Extension<SessionState>,
+    Xml(body): Xml<AuthenticationRequest>,
+) -> Result<Xml<AuthenticationResponse>, Response> {
+    // FIXME: check grantType and scope
+    if !(session.authenticated && session.auth_type == "basic") {
+        return Err(
+            error_response(StatusCode::UNAUTHORIZED, "400", "UNAUTHORIZED").into_response(),
+        );
+    }
+
+    let mut claims = HashMap::new();
+    claims.insert("auth_version", "3");
+    claims.insert("scope", &body.scope);
+    claims.insert("grant_type", &body.grant_type);
+    claims.insert("permissions", "payment_initiate payment_inquiry");
+
+    match encrypt_token(
+        &state.jwt_pub,
+        &session.client_id,
+        &claims,
         Duration::from_secs(30 * 60),
     ) {
         Ok(token) => {

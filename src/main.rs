@@ -7,7 +7,7 @@ use axum::{
 };
 use axum_server::tls_openssl::OpenSSLConfig;
 use citimock::config::create_connection_pool;
-use citimock::handlers::authentication::authentication_v2;
+use citimock::handlers::authentication::{oauth_token_v2, oauth_token_v3};
 use citimock::layers::authentication::AuthenticationLayer;
 use citimock::layers::authentication_check::authentication_check_layer;
 use citimock::layers::document_decryption::DecryptionLayer;
@@ -135,7 +135,11 @@ async fn main() {
     let authenticate_router = Router::new()
         .route(
             "/authenticationservices/v2/oauth/token",
-            post(authentication_v2),
+            post(oauth_token_v2),
+        )
+        .route(
+            "/authenticationservices/v3/oauth/token",
+            post(oauth_token_v3),
         )
         .with_state(Arc::clone(&shared_state))
         .layer(

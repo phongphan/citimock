@@ -3,12 +3,13 @@ use josekit::{
     jwt::{self, JwtPayload},
     JoseError,
 };
+use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
 pub fn encrypt_token(
     public_key: &str,
     client_id: &str,
-    version: &str,
+    claims: &HashMap<&str, &str>,
     duration: Duration,
 ) -> Result<String, JoseError> {
     let mut header = JweHeader::new();
@@ -19,12 +20,10 @@ pub fn encrypt_token(
     let expires_at = now.checked_add(duration).unwrap();
     let mut payload = JwtPayload::new();
     payload.set_subject(client_id);
-    payload
-        .set_claim(
-            "auth_version",
-            Some(josekit::Value::String(version.to_owned())),
-        )
-        .unwrap();
+    for (key, value) in claims.iter() {
+        payload.set_claim(key, Some(value.to_owned().into()));
+    }
+
     payload.set_not_before(&now);
     payload.set_expires_at(&expires_at);
 
