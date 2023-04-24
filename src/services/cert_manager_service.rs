@@ -24,7 +24,6 @@ impl CertManager {
         .bind("xml-dsig")
         .fetch_optional(&self.pool)
         .await;
-        //println!("find_dsig_cert: {:?}", result);
 
         result.unwrap_or(None)
     }
@@ -43,8 +42,19 @@ impl CertManager {
         .bind("xml-enc")
         .fetch_optional(&self.pool)
         .await;
-        //println!("find_enc_cert: {:?}", result);
 
         result.unwrap_or(None)
+    }
+
+    pub async fn load_trusted_certs(&self) -> Vec<String> {
+        let result: Result<Vec<String>, sqlx::Error> = sqlx::query_scalar(
+            "SELECT cert FROM certificates
+                WHERE cert_type = 'mtls'
+                    AND deleted_at IS NULL",
+        )
+        .fetch_all(&self.pool)
+        .await;
+
+        result.unwrap_or(Vec::new())
     }
 }

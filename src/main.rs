@@ -6,6 +6,7 @@ use axum::{
     Router,
 };
 use axum_server::tls_openssl::OpenSSLConfig;
+use citimock::certificates::utils::TestKey;
 use citimock::config::create_connection_pool;
 use citimock::handlers::authentication::{oauth_token_v2, oauth_token_v3};
 use citimock::layers::authentication::AuthenticationLayer;
@@ -16,20 +17,20 @@ use citimock::layers::document_signature_verifier::VerifierLayer;
 use citimock::layers::document_signing::SigningLayer;
 use citimock::services::cert_manager_service::CertManager;
 use citimock::AppState;
-use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod, SslVerifyMode};
+use openssl::pkey::PKey;
+use openssl::ssl::{SslAcceptor, SslMethod, SslVerifyMode};
 use openssl::x509::{
     store::{X509Store, X509StoreBuilder},
     X509,
 };
 use std::sync::Arc;
-use std::{error, net::SocketAddr, path::PathBuf, ptr};
+use std::{net::SocketAddr, ptr};
 use tower::ServiceBuilder;
-
-//type SharedState = Arc<AppState>;
 
 #[tokio::main]
 async fn main() {
     let key = citimock::certificates::utils::generate_test_key().unwrap();
+    init_development_env(&key);
 
     init_xmlsec();
     let tmpl = include_str!("../templates/signing.xml");
@@ -65,53 +66,23 @@ async fn main() {
         .unwrap();
 
     let cert_manager = CertManager::new(pool.clone());
-    let app_state = AppState {
-        cert_manager,
-        pool,
-        jwt_pri: include_str!("../certs/server_pk.key").to_owned(),
-        jwt_pub: include_str!("../certs/server_pub.pem").to_owned(),
-        default_dsig_cert: include_str!("../certs/server_cert.crt").to_owned(),
-        default_enc_cert: include_str!("../certs/server_cert.crt").to_owned(),
-    };
-    let shared_state = Arc::new(app_state.clone());
 
     // openssl
+    let ssl_key =
+        PKey::private_key_from_pem(std::env::var("MTLS_KEY").unwrap().as_bytes()).unwrap();
+    let ssl_cert = X509::from_pem(std::env::var("MTLS_CERT").unwrap().as_bytes()).unwrap();
     let mut tls_builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
-    let ssl_cert = x509_slurp(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("certs")
-            .join("server_cert.crt"),
-    )
-    .unwrap();
-    tls_builder.set_certificate(ssl_cert.as_ref()).unwrap();
-    tls_builder
-        .set_certificate_file(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("certs")
-                .join("server_cert.crt"),
-            SslFiletype::PEM,
-        )
-        .unwrap();
-    tls_builder
-        .set_private_key_file(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("certs")
-                .join("server_pk.key"),
-            SslFiletype::PEM,
-        )
-        .unwrap();
+    tls_builder.set_private_key(&ssl_key).unwrap();
+    tls_builder.set_certificate(&ssl_cert).unwrap();
     tls_builder.check_private_key().unwrap();
 
     // client verifier
     // set options to make sure to validate the peer aka mtls
-    let trusted_client_cert = x509_slurp(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("certs")
-            .join("client_cert.crt"),
-    )
-    .unwrap();
     let mut builder = X509StoreBuilder::new().unwrap();
-    let _ = builder.add_cert(trusted_client_cert);
+    for trusted_cert in cert_manager.load_trusted_certs().await {
+        let c = X509::from_pem(trusted_cert.as_bytes()).unwrap();
+        builder.add_cert(c).unwrap();
+    }
     let store: X509Store = builder.build();
 
     let mut verify_mode = SslVerifyMode::empty();
@@ -120,6 +91,16 @@ async fn main() {
     tls_builder.set_verify_cert_store(store).unwrap();
     tls_builder.set_verify(verify_mode);
     // openssl
+
+    let app_state = AppState {
+        cert_manager,
+        pool,
+        jwt_pri: std::env::var("JWE_KEY").unwrap(),
+        jwt_pub: std::env::var("JWE_PUB").unwrap(),
+        default_dsig_cert: std::env::var("MTLS_CERT").unwrap(),
+        default_enc_cert: std::env::var("MTLS_CERT").unwrap(),
+    };
+    let shared_state = Arc::new(app_state.clone());
 
     let health_check_router = Router::new().route("/", get(handler));
     //.with_state(Arc::clone(&shared_state));
@@ -195,11 +176,23 @@ fn init_xmlsec() {
     }
 }
 
-fn x509_slurp(path_buf: PathBuf) -> Result<X509, Box<dyn error::Error>> {
-    let data = std::fs::read(path_buf)?;
-    X509::from_pem(&data).map_err(|e| e.into())
-}
-
 async fn handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> Html<String> {
     Html(format!("<h1>Hello, world! {}", addr))
+}
+
+fn init_development_env(key: &TestKey) {
+    use std::env::set_var;
+
+    let ssl_key = include_str!("../certs/server_pk.key");
+    let ssl_pub = include_str!("../certs/server_pub.pem");
+    let ssl_cert = include_str!("../certs/server_cert.crt");
+
+    set_var("MTLS_KEY", ssl_key);
+    set_var("MTLS_CERT", ssl_cert);
+    set_var("JWE_KEY", ssl_key);
+    set_var("JWE_PUB", ssl_pub);
+    set_var("XML_DSIG_KEY", &key.private_key);
+    set_var("XML_DSIG_CERT", &key.certificate);
+    set_var("XML_ENC_KEY", &key.private_key);
+    set_var("XML_ENC_CERT", &key.certificate);
 }

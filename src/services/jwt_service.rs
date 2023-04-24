@@ -21,7 +21,7 @@ pub fn encrypt_token(
     let mut payload = JwtPayload::new();
     payload.set_subject(client_id);
     for (key, value) in claims.iter() {
-        payload.set_claim(key, Some(value.to_owned().into()));
+        payload.set_claim(key, Some(value.to_owned().into()))?;
     }
 
     payload.set_not_before(&now);
