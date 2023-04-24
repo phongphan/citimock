@@ -1,13 +1,12 @@
-use crate::extractors::basic_auth::ExtractBasicAuth;
 use crate::extractors::xml::Xml;
 use crate::services::jwt_service::encrypt_token;
-use crate::AppState;
+use crate::{AppState, SessionState};
 use axum::{
     extract::State,
     http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
+    Extension,
 };
-use libpasta;
 use std::sync::Arc;
 use std::time::Duration;
 use yaserde;
@@ -50,40 +49,39 @@ pub struct AuthenticationError {
 
 pub async fn authentication_v2(
     State(state): State<Arc<AppState>>,
-    ExtractBasicAuth((user, password)): ExtractBasicAuth,
+    Extension(session): Extension<SessionState>,
     Xml(body): Xml<AuthenticationRequest>,
-    //XmlEncBody(body): XmlEncBody,
 ) -> Result<Xml<AuthenticationResponse>, Response> {
-    println!("user: {:?}", user);
     println!("body: {:?}", body);
-    match crate::services::client_service::get_client_by_uid(&state.pool, &user).await {
-        Ok(client) => {
-            println!("{:?}", client);
-            if libpasta::verify_password(client.hash(), &password) {
-                let token = encrypt_token(&state.jwt_pub, &user, "2", Duration::from_secs(30 * 60))
-                    .unwrap();
-                Ok(Xml(AuthenticationResponse {
-                    token_type: "client_credentials".to_owned(),
-                    access_token: token,
-                    scope: "/authenticationservices/v1".to_owned(),
-                    expires_in: 1800,
-                }))
-            } else {
-                Err(error_response(StatusCode::UNAUTHORIZED, "401", "UNAUTHORIZED").into_response())
-            }
+    println!("auth_type: {:?}", session.auth_type);
+    println!("session client: {}", session.client_id);
+    if !(session.authenticated && session.auth_type == "basic") {
+        return Err(
+            error_response(StatusCode::UNAUTHORIZED, "400", "UNAUTHORIZED").into_response(),
+        );
+    }
+
+    match encrypt_token(
+        &state.jwt_pub,
+        &session.client_id,
+        "2",
+        Duration::from_secs(30 * 60),
+    ) {
+        Ok(token) => {
+            println!("token: {}", token);
+            Ok(Xml(AuthenticationResponse {
+                token_type: "client_credentials".to_owned(),
+                access_token: token,
+                scope: "/authenticationservices/v1".to_owned(),
+                expires_in: 1800,
+            }))
         }
-        Err(sqlx::Error::RowNotFound) => {
-            Err(error_response(StatusCode::FORBIDDEN, "403", "Client is forbidden").into_response())
-        }
-        Err(err) => {
-            println!("{:?}", err);
-            Err(error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "500",
-                "INTERNAL_SERVER_ERROR",
-            )
-            .into_response())
-        }
+        Err(err) => Err(error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "500",
+            err.to_string().as_str(),
+        )
+        .into_response()),
     }
 }
 

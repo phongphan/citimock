@@ -11,10 +11,12 @@ CREATE TABLE clients (
 create table certificates (
     uid varchar(128) primary key,
     client_id varchar(128) not null references clients(uid),
-    cert_type varchar(128) not null check (cert_type in ('xml-dsig', 'xml-enc')),
+    cert_type varchar(128) not null check (cert_type in ('xml-dsig', 'xml-enc', 'mtls')),
     cert text not null,
     valid_from timestamp with time zone,
     valid_to timestamp with time zone,
     deleted_at timestamp with time zone,
-    inserted_at timestamp with time zone
+    inserted_at timestamp with time zone,
+    updated_at timestamp with time zone,
 );
+create index certificates_client_certs_idx ON certificates(client_id, cert_type);

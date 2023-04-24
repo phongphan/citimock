@@ -1,12 +1,12 @@
 use axum::{
-    body::Body,
     extract::ConnectInfo,
-    http::{header::CONTENT_TYPE, method::Method, Request, StatusCode},
-    middleware::{self, Next},
-    response::{Html, IntoResponse, Response},
+    middleware::{self},
+    response::Html,
     routing::{get, post},
     Router,
 };
+use citimock::services::authentication_check_layer::authentication_check_layer;
+use citimock::services::cert_manager_service::CertManager;
 
 use axum_server::tls_openssl::OpenSSLConfig;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod, SslVerifyMode};
@@ -67,10 +67,14 @@ async fn main() {
         .await
         .unwrap();
 
+    let cert_manager = CertManager::new(pool.clone());
     let app_state = AppState {
+        cert_manager,
         pool,
         jwt_pri: include_str!("../certs/server_pk.key").to_owned(),
         jwt_pub: include_str!("../certs/server_pub.pem").to_owned(),
+        default_dsig_cert: include_str!("../certs/server_cert.crt").to_owned(),
+        default_enc_cert: include_str!("../certs/server_cert.crt").to_owned(),
     };
     let shared_state = Arc::new(app_state.clone());
 
@@ -157,9 +161,9 @@ async fn main() {
         .layer(
             ServiceBuilder::new()
                 .layer(authentication_layer)
-                .layer(middleware::from_fn(validate_content_type))
                 .layer(encrypt_response_layer)
                 .layer(signing_response_layer)
+                .layer(middleware::from_fn(authentication_check_layer))
                 .layer(decrypt_request_layer)
                 .layer(verify_request_layer),
         );
@@ -214,27 +218,4 @@ fn x509_slurp(path_buf: PathBuf) -> Result<X509, Box<dyn error::Error>> {
 
 async fn handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> Html<String> {
     Html(format!("<h1>Hello, world! {}", addr))
-}
-
-async fn validate_content_type(
-    request: Request<Body>,
-    next: Next<Body>,
-) -> Result<impl IntoResponse, Response> {
-    let methods_with_body = [Method::PATCH, Method::POST, Method::PUT];
-    if methods_with_body.contains(request.method()) {
-        let content_type_header = request.headers().get(CONTENT_TYPE);
-        let content_type = content_type_header.and_then(|value| value.to_str().ok());
-
-        if let Some(content_type) = content_type {
-            if !(content_type.starts_with("application/xml")
-                || content_type.starts_with("text/xml"))
-            {
-                return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response());
-            }
-        } else {
-            return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response());
-        }
-    }
-
-    Ok(next.run(request).await)
 }

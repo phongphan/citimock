@@ -85,7 +85,7 @@ where
         Box::pin(async move {
             println!("entering singing service");
             let response: Response = future.await?;
-            println!("signing response");
+            println!("signing response: {:?}", response);
             let (mut parts, body) = response.into_parts();
             let bytes = match hyper::body::to_bytes(body).await {
                 Ok(v) => v,

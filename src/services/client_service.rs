@@ -1,4 +1,4 @@
-use sqlx::postgres::PgPool;
+use sqlx::PgPool;
 
 use crate::models::client::Client;
 
