@@ -5,24 +5,20 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use axum_server::tls_openssl::OpenSSLConfig;
+use citimock::config::create_connection_pool;
+use citimock::handlers::authentication::authentication_v2;
 use citimock::services::authentication_check_layer::authentication_check_layer;
 use citimock::services::cert_manager_service::CertManager;
-
-use axum_server::tls_openssl::OpenSSLConfig;
+use citimock::AppState;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod, SslVerifyMode};
 use openssl::x509::{
     store::{X509Store, X509StoreBuilder},
     X509,
 };
+use std::sync::Arc;
 use std::{error, net::SocketAddr, path::PathBuf, ptr};
 use tower::ServiceBuilder;
-
-use citimock::config::create_connection_pool;
-use std::sync::Arc;
-
-use citimock::handlers::authentication::authentication_v2;
-
-use citimock::AppState;
 
 //type SharedState = Arc<AppState>;
 

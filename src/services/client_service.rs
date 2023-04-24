@@ -1,6 +1,5 @@
-use sqlx::PgPool;
-
 use crate::models::client::Client;
+use sqlx::PgPool;
 
 pub async fn get_client_by_uid(conn: &PgPool, uid: &str) -> Result<Client, sqlx::Error> {
     sqlx::query_as::<_, Client>("SELECT * FROM clients WHERE uid = $1")

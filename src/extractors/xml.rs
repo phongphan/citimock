@@ -1,7 +1,6 @@
 use crate::extractors::error_response;
 use crate::extractors::xml_content_type;
 use crate::handlers::authentication::AuthenticationError;
-
 use axum::{
     async_trait,
     body::Body,
@@ -9,7 +8,6 @@ use axum::{
     http::{header, HeaderValue, Request, StatusCode},
     response::{IntoResponse, Response},
 };
-
 use yaserde;
 
 #[derive(Debug, Clone, Copy, Default)]
