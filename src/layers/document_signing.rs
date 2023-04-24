@@ -83,7 +83,7 @@ where
         let key = self.key.clone();
         let future = self.inner.call(request);
         Box::pin(async move {
-            println!("entering singing service");
+            println!("entering signing service");
             let response: Response = future.await?;
             println!("signing response: {:?}", response);
             let (mut parts, body) = response.into_parts();

@@ -17,6 +17,6 @@ create table certificates (
     valid_to timestamp with time zone,
     deleted_at timestamp with time zone,
     inserted_at timestamp with time zone,
-    updated_at timestamp with time zone,
+    updated_at timestamp with time zone
 );
 create index certificates_client_certs_idx ON certificates(client_id, cert_type);

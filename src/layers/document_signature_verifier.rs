@@ -17,6 +17,7 @@ use crate::xmlsec::xmlSecOpenSSLAppKeyLoadMemory;
 use crate::xmlsec::xmlUnlinkNode;
 use crate::xmlsec::XMLSEC_KEYINFO_FLAGS_LAX_KEY_SEARCH;
 use crate::xmlsec::{xmlDocGetRootElement, xmlSecDSigNs, xmlSecFindNode, xmlSecNodeSignature};
+use crate::SessionState;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::response::Response;
@@ -27,25 +28,12 @@ use std::task::{Context, Poll};
 use tower::{Layer, Service};
 
 #[derive(Clone)]
-struct Certificate {
-    certificate: String,
-    certificate_name: String,
-}
-
-#[derive(Clone)]
-pub struct VerifierLayer {
-    certificate: Certificate,
-}
+pub struct VerifierLayer {}
 
 impl VerifierLayer {
-    pub fn new(certificate: &str, certificate_name: &str) -> Self {
+    pub fn new() -> Self {
         println!("creating new VerifierLayer");
-        VerifierLayer {
-            certificate: Certificate {
-                certificate: certificate.to_owned(),
-                certificate_name: certificate_name.to_owned(),
-            },
-        }
+        VerifierLayer {}
     }
 }
 
@@ -53,19 +41,24 @@ impl<S> Layer<S> for VerifierLayer {
     type Service = VerifierService<S>;
 
     fn layer(&self, service: S) -> Self::Service {
-        VerifierService::new(service, self.certificate.clone())
+        VerifierService::new(service)
+    }
+}
+
+impl Default for VerifierLayer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 pub struct VerifierService<T> {
     inner: T,
-    certificate: Certificate,
 }
 
 impl<T> VerifierService<T> {
-    fn new(inner: T, certificate: Certificate) -> Self {
+    fn new(inner: T) -> Self {
         println!("creating new VerifierService");
-        VerifierService { inner, certificate }
+        VerifierService { inner }
     }
 }
 
@@ -73,7 +66,6 @@ impl<T: Clone> Clone for VerifierService<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
-            certificate: self.certificate.clone(),
         }
     }
 }
@@ -94,7 +86,7 @@ where
 
     fn call(&mut self, request: Request<Body>) -> Self::Future {
         let mut inner = self.inner.clone();
-        let certificate = self.certificate.clone();
+        let session = request.extensions().get::<SessionState>().unwrap().clone();
         Box::pin(async move {
             println!("verifying request");
             let (parts, body) = request.into_parts();
@@ -120,11 +112,7 @@ where
                 }
             };
 
-            let verified = match verify_signature(
-                &certificate.certificate,
-                &certificate.certificate_name,
-                xml,
-            ) {
+            let verified = match verify_signature(&session.dsig_cert, "dsig-cert", xml) {
                 Ok(v) => v,
                 Err(err) => {
                     return Ok(error_response(

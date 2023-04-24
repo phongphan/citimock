@@ -33,8 +33,14 @@ async fn main() {
     init_development_env(&key);
 
     init_xmlsec();
-    let tmpl = include_str!("../templates/signing.xml");
-    let enc_tmpl = include_str!("../templates/encryption.xml");
+    let tmpl = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/templates/signing.xml"
+    ));
+    let enc_tmpl = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/templates/encryption.xml"
+    ));
     //let pk = include_str!("../certs/server_pk.key");
     let my_doc = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <oAuthToken xmlns=\"http://com.citi.citiconnect/services/types/oauthtoken/v1\">
@@ -43,12 +49,14 @@ async fn main() {
   <sourceApplication>CCF</sourceApplication>
 </oAuthToken>";
 
+    let client_test_key = std::env::var("TEST_CLIENT_XML_DSIG_KEY").unwrap();
+    let server_test_cert = std::env::var("XML_ENC_CERT").unwrap();
     let signed_doc =
-        citimock::layers::document_signing::sign(tmpl, &key.private_key, "testkey", my_doc);
+        citimock::layers::document_signing::sign(tmpl, &client_test_key, "testkey", my_doc);
     //println!("signed: {}", signed_doc.unwrap());
     let enc_doc = citimock::layers::document_encryption::encrypt(
         enc_tmpl,
-        &key.certificate,
+        &server_test_cert,
         "testcert",
         &signed_doc.unwrap(),
     );
@@ -105,11 +113,12 @@ async fn main() {
     let health_check_router = Router::new().route("/", get(handler));
     //.with_state(Arc::clone(&shared_state));
 
-    let signing_response_layer = SigningLayer::new(&key.private_key, "keyname", tmpl);
-    let encrypt_response_layer =
-        EncryptionLayer::new(&key.certificate, "xmlenc-encrypt-certificate", enc_tmpl);
-    let decrypt_request_layer = DecryptionLayer::new(&key.private_key, "xmlenc-decrypt-key");
-    let verify_request_layer = VerifierLayer::new(&key.certificate, "xmlenc-verifier-certificate");
+    let dsig_key = std::env::var("XML_DSIG_KEY").unwrap();
+    let enc_key = std::env::var("XML_ENC_KEY").unwrap();
+    let signing_response_layer = SigningLayer::new(&dsig_key, "keyname", tmpl);
+    let encrypt_response_layer = EncryptionLayer::new(enc_tmpl);
+    let decrypt_request_layer = DecryptionLayer::new(&enc_key, "xmlenc-decrypt-key");
+    let verify_request_layer = VerifierLayer::new();
 
     let authentication_layer = AuthenticationLayer::new(app_state.clone());
 
@@ -180,19 +189,37 @@ async fn handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> Html<String> {
     Html(format!("<h1>Hello, world! {}", addr))
 }
 
-fn init_development_env(key: &TestKey) {
+fn init_development_env(_key: &TestKey) {
     use std::env::set_var;
 
-    let ssl_key = include_str!("../certs/server_pk.key");
-    let ssl_pub = include_str!("../certs/server_pub.pem");
-    let ssl_cert = include_str!("../certs/server_cert.crt");
+    let ssl_key = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/certs/server_pk.key"));
+    let ssl_pub = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/certs/server_pub.pem"));
+    let ssl_cert = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/certs/server_cert.crt"
+    ));
+
+    let dsig_key = ssl_key;
+    let dsig_cert = ssl_cert;
+    let enc_key = ssl_key;
+    let enc_cert = ssl_cert;
 
     set_var("MTLS_KEY", ssl_key);
     set_var("MTLS_CERT", ssl_cert);
     set_var("JWE_KEY", ssl_key);
     set_var("JWE_PUB", ssl_pub);
-    set_var("XML_DSIG_KEY", &key.private_key);
-    set_var("XML_DSIG_CERT", &key.certificate);
-    set_var("XML_ENC_KEY", &key.private_key);
-    set_var("XML_ENC_CERT", &key.certificate);
+    set_var("XML_DSIG_KEY", dsig_key);
+    set_var("XML_DSIG_CERT", dsig_cert);
+    set_var("XML_ENC_KEY", enc_key);
+    set_var("XML_ENC_CERT", enc_cert);
+
+    let client_test_key = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/certs/client_pk.key"));
+    let client_test_cert = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/certs/client_cert.crt"
+    ));
+    set_var("TEST_CLIENT_XML_DSIG_KEY", client_test_key);
+    set_var("TEST_CLIENT_XML_DSIG_CERT", client_test_cert);
+    set_var("TEST_CLIENT_XML_ENC_KEY", client_test_key);
+    set_var("TEST_CLIENT_XML_ENC_CERT", client_test_cert);
 }

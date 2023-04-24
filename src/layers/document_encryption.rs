@@ -23,6 +23,7 @@ use crate::xmlsec::xmlSecOpenSSLAppKeyLoadMemory;
 use crate::xmlsec::xmlSecOpenSSLKeyDataAesGetKlass;
 use crate::xmlsec::xmlSecOpenSSLKeyDataDesGetKlass;
 use crate::xmlsec::XMLSEC_KEYINFO_FLAGS_LAX_KEY_SEARCH;
+use crate::SessionState;
 use axum::body::{self, Body};
 use axum::http::{Request, StatusCode};
 use axum::response::Response;
@@ -33,24 +34,20 @@ use std::task::{Context, Poll};
 use tower::{Layer, Service};
 
 #[derive(Clone)]
-struct Certificate {
-    certificate: String,
-    certificate_name: String,
+struct XmlEncContext {
     template: String,
 }
 
 #[derive(Clone)]
 pub struct EncryptionLayer {
-    certificate: Certificate,
+    context: XmlEncContext,
 }
 
 impl EncryptionLayer {
-    pub fn new(certificate: &str, certificate_name: &str, template: &str) -> Self {
+    pub fn new(template: &str) -> Self {
         println!("creating new EncryptionLayer");
         EncryptionLayer {
-            certificate: Certificate {
-                certificate: certificate.to_owned(),
-                certificate_name: certificate_name.to_owned(),
+            context: XmlEncContext {
                 template: template.to_owned(),
             },
         }
@@ -61,19 +58,19 @@ impl<S> Layer<S> for EncryptionLayer {
     type Service = EncryptionService<S>;
 
     fn layer(&self, service: S) -> Self::Service {
-        EncryptionService::new(service, self.certificate.clone())
+        EncryptionService::new(service, self.context.clone())
     }
 }
 
 pub struct EncryptionService<T> {
     inner: T,
-    certificate: Certificate,
+    context: XmlEncContext,
 }
 
 impl<T> EncryptionService<T> {
-    fn new(inner: T, certificate: Certificate) -> Self {
+    fn new(inner: T, context: XmlEncContext) -> Self {
         println!("creating new EncryptionService");
-        EncryptionService { inner, certificate }
+        EncryptionService { inner, context }
     }
 }
 
@@ -81,7 +78,7 @@ impl<T: Clone> Clone for EncryptionService<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
-            certificate: self.certificate.clone(),
+            context: self.context.clone(),
         }
     }
 }
@@ -101,10 +98,11 @@ where
     }
 
     fn call(&mut self, request: Request<Body>) -> Self::Future {
-        let certificate = self.certificate.clone();
+        let session = request.extensions().get::<SessionState>().unwrap().clone();
+        let context = self.context.clone();
         let future = self.inner.call(request);
         Box::pin(async move {
-            println!("entering encryptiion service");
+            println!("entering encryption service");
             let response: Response = future.await?;
             println!("encrypting response");
             let (mut parts, body) = response.into_parts();
@@ -131,9 +129,9 @@ where
             };
 
             let encrypted_doc = match encrypt(
-                &certificate.template,
-                &certificate.certificate,
-                &certificate.certificate_name,
+                &context.template,
+                &session.enc_cert,
+                "encryption-certificate",
                 xml,
             ) {
                 Ok(v) => v,
