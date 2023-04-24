@@ -56,7 +56,7 @@ pub async fn authentication_v2(
 ) -> Result<Xml<AuthenticationResponse>, Response> {
     println!("user: {:?}", user);
     println!("body: {:?}", body);
-    match crate::services::client_service::get_client_by_id(&state.pool, &user).await {
+    match crate::services::client_service::get_client_by_uid(&state.pool, &user).await {
         Ok(client) => {
             println!("{:?}", client);
             if libpasta::verify_password(client.hash(), &password) {

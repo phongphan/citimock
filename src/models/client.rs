@@ -13,7 +13,7 @@ pub enum ClientStatus {
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct Client {
-    client_id: String,
+    uid: String,
     name: String,
     status: ClientStatus,
     hash: String,
@@ -24,7 +24,7 @@ pub struct Client {
 impl Client {
     pub fn new(name: &str, password: &str, status: ClientStatus) -> Client {
         Client {
-            client_id: Uuid::new_v4().to_string(),
+            uid: Uuid::new_v4().to_string(),
             name: name.to_owned(),
             status,
             hash: hash_password(password),
@@ -33,8 +33,8 @@ impl Client {
         }
     }
 
-    pub fn client_id(&self) -> &str {
-        &self.client_id
+    pub fn uid(&self) -> &str {
+        &self.uid
     }
     pub fn name(&self) -> &str {
         &self.name
