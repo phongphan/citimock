@@ -15,8 +15,8 @@ pub struct AppState {
     pub pool: PgPool,
     pub jwt_pri: String,
     pub jwt_pub: String,
-    pub default_dsig_cert: String,
-    pub default_enc_cert: String,
+    pub default_dsig_cert: VerifyCertPem,
+    pub default_enc_cert: EncryptCertPem,
 }
 
 #[derive(Clone)]
@@ -24,9 +24,27 @@ pub struct SessionState {
     pub client_id: String,
     pub auth_type: String,
     pub authenticated: bool,
-    pub dsig_cert: String,
-    pub enc_cert: String,
+    pub dsig_cert: VerifyCertPem,
+    pub enc_cert: EncryptCertPem,
 }
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct DSigKeyPem(pub String);
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct DSigTemplate(pub String);
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct DecryptKeyPem(pub String);
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct EncryptCertPem(pub String);
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct EncTemplate(pub String);
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct VerifyCertPem(pub String);
 
 pub mod xmlsec {
     #![allow(non_upper_case_globals)]

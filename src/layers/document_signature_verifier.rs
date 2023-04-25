@@ -18,6 +18,7 @@ use crate::xmlsec::xmlUnlinkNode;
 use crate::xmlsec::XMLSEC_KEYINFO_FLAGS_LAX_KEY_SEARCH;
 use crate::xmlsec::{xmlDocGetRootElement, xmlSecDSigNs, xmlSecFindNode, xmlSecNodeSignature};
 use crate::SessionState;
+use crate::VerifyCertPem;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::response::Response;
@@ -144,7 +145,11 @@ where
     }
 }
 
-fn verify_signature(certificate: &str, certificate_name: &str, xml: &str) -> Result<bool, String> {
+fn verify_signature(
+    VerifyCertPem(certificate): &VerifyCertPem,
+    certificate_name: &str,
+    xml: &str,
+) -> Result<bool, String> {
     unsafe {
         let doc = XMLDocWrapper::from_xml(xml);
         let root = xmlDocGetRootElement(doc.ptr());

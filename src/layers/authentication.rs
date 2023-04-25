@@ -1,7 +1,9 @@
 // validate basic/token authentication, extract the certificates, and set the session states
 use crate::services::jwt_service;
 use crate::AppState;
+use crate::EncryptCertPem;
 use crate::SessionState;
+use crate::VerifyCertPem;
 use axum::body::Body;
 use axum::{
     extract::{FromRequestParts, Query, TypedHeader},
@@ -88,16 +90,16 @@ where
                                         client_id,
                                         auth_type: format!("token-v{}", version),
                                         authenticated: true,
-                                        dsig_cert: dsig,
-                                        enc_cert: enc,
+                                        dsig_cert: VerifyCertPem(dsig),
+                                        enc_cert: EncryptCertPem(enc),
                                     });
                                 } else {
                                     parts.extensions.insert::<SessionState>(SessionState {
                                         client_id,
                                         auth_type: "invalid-token".to_owned(),
                                         authenticated: false,
-                                        dsig_cert: dsig,
-                                        enc_cert: enc,
+                                        dsig_cert: VerifyCertPem(dsig),
+                                        enc_cert: EncryptCertPem(enc),
                                     });
                                 }
                             } else {
@@ -105,8 +107,8 @@ where
                                     client_id,
                                     auth_type: "invalid-token".to_owned(),
                                     authenticated: false,
-                                    dsig_cert: dsig,
-                                    enc_cert: enc,
+                                    dsig_cert: VerifyCertPem(dsig),
+                                    enc_cert: EncryptCertPem(enc),
                                 });
                             }
                         }
@@ -161,16 +163,16 @@ where
                         client_id: client_id.to_owned(),
                         auth_type: "basic".to_owned(),
                         authenticated: true,
-                        dsig_cert: dsig,
-                        enc_cert: enc,
+                        dsig_cert: VerifyCertPem(dsig),
+                        enc_cert: EncryptCertPem(enc),
                     });
                 } else {
                     parts.extensions.insert::<SessionState>(SessionState {
                         client_id: client_id.to_owned(),
                         auth_type: "basic".to_owned(),
                         authenticated: false,
-                        dsig_cert: dsig,
-                        enc_cert: enc,
+                        dsig_cert: VerifyCertPem(dsig),
+                        enc_cert: EncryptCertPem(enc),
                     });
                 }
             } else {

@@ -10,6 +10,8 @@ use crate::xmlsec::xmlSecKeyDataFormat_xmlSecKeyDataFormatPem;
 use crate::xmlsec::xmlSecKeySetName;
 use crate::xmlsec::xmlSecOpenSSLAppKeyLoadMemory;
 use crate::xmlsec::{xmlDocGetRootElement, xmlSecDSigNs, xmlSecFindNode, xmlSecNodeSignature};
+use crate::DSigKeyPem;
+use crate::DSigTemplate;
 use axum::body;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -22,9 +24,9 @@ use tower::{Layer, Service};
 
 #[derive(Clone)]
 pub struct Key {
-    key: String,
+    key: DSigKeyPem,
     key_name: String,
-    template: String,
+    template: DSigTemplate,
 }
 
 #[derive(Clone)]
@@ -33,13 +35,13 @@ pub struct SigningLayer {
 }
 
 impl SigningLayer {
-    pub fn new(key: &str, key_name: &str, template: &str) -> Self {
+    pub fn new(key: &DSigKeyPem, key_name: &str, template: &DSigTemplate) -> Self {
         println!("creating new SigningLayer");
         SigningLayer {
             key: Key {
-                key: key.to_owned(),
+                key: key.clone(),
                 key_name: key_name.to_owned(),
-                template: template.to_owned(),
+                template: template.clone(),
             },
         }
     }
@@ -135,7 +137,12 @@ impl<T: Clone> Clone for SigningService<T> {
     }
 }
 
-pub fn sign(template: &str, key: &str, key_name: &str, xml: &str) -> Result<String, String> {
+pub fn sign(
+    DSigTemplate(template): &DSigTemplate,
+    DSigKeyPem(key): &DSigKeyPem,
+    key_name: &str,
+    xml: &str,
+) -> Result<String, String> {
     unsafe {
         let doc = XMLDocWrapper::from_xml(xml);
         let root = xmlDocGetRootElement(doc.ptr());

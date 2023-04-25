@@ -33,14 +33,20 @@ async fn main() {
     init_development_env(&key);
 
     init_xmlsec();
-    let tmpl = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/templates/signing.xml"
-    ));
-    let enc_tmpl = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/templates/encryption.xml"
-    ));
+    let tmpl = citimock::DSigTemplate(
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/templates/signing.xml"
+        ))
+        .to_owned(),
+    );
+    let enc_tmpl = citimock::EncTemplate(
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/templates/encryption.xml"
+        ))
+        .to_owned(),
+    );
     //let pk = include_str!("../certs/server_pk.key");
     let my_doc = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <oAuthToken xmlns=\"http://com.citi.citiconnect/services/types/oauthtoken/v1\">
@@ -50,12 +56,16 @@ async fn main() {
 </oAuthToken>";
 
     let client_test_key = std::env::var("TEST_CLIENT_XML_DSIG_KEY").unwrap();
-    let server_test_cert = std::env::var("XML_ENC_CERT").unwrap();
-    let signed_doc =
-        citimock::layers::document_signing::sign(tmpl, &client_test_key, "testkey", my_doc);
+    let server_test_cert = citimock::EncryptCertPem(std::env::var("XML_ENC_CERT").unwrap());
+    let signed_doc = citimock::layers::document_signing::sign(
+        &tmpl,
+        &citimock::DSigKeyPem(client_test_key),
+        "testkey",
+        my_doc,
+    );
     //println!("signed: {}", signed_doc.unwrap());
     let enc_doc = citimock::layers::document_encryption::encrypt(
-        enc_tmpl,
+        &enc_tmpl,
         &server_test_cert,
         "testcert",
         &signed_doc.unwrap(),
@@ -105,18 +115,18 @@ async fn main() {
         pool,
         jwt_pri: std::env::var("JWE_KEY").unwrap(),
         jwt_pub: std::env::var("JWE_PUB").unwrap(),
-        default_dsig_cert: std::env::var("MTLS_CERT").unwrap(),
-        default_enc_cert: std::env::var("MTLS_CERT").unwrap(),
+        default_dsig_cert: citimock::VerifyCertPem(std::env::var("MTLS_CERT").unwrap()),
+        default_enc_cert: citimock::EncryptCertPem(std::env::var("MTLS_CERT").unwrap()),
     };
     let shared_state = Arc::new(app_state.clone());
 
     let health_check_router = Router::new().route("/", get(handler));
     //.with_state(Arc::clone(&shared_state));
 
-    let dsig_key = std::env::var("XML_DSIG_KEY").unwrap();
-    let enc_key = std::env::var("XML_ENC_KEY").unwrap();
-    let signing_response_layer = SigningLayer::new(&dsig_key, "keyname", tmpl);
-    let encrypt_response_layer = EncryptionLayer::new(enc_tmpl);
+    let dsig_key = citimock::DSigKeyPem(std::env::var("XML_DSIG_KEY").unwrap());
+    let enc_key = citimock::DecryptKeyPem(std::env::var("XML_ENC_KEY").unwrap());
+    let signing_response_layer = SigningLayer::new(&dsig_key, "keyname", &tmpl);
+    let encrypt_response_layer = EncryptionLayer::new(&enc_tmpl);
     let decrypt_request_layer = DecryptionLayer::new(&enc_key, "xmlenc-decrypt-key");
     let verify_request_layer = VerifierLayer::new();
 

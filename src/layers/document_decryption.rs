@@ -16,6 +16,7 @@ use crate::xmlsec::xmlSecOpenSSLAppDefaultKeysMngrAdoptKey;
 use crate::xmlsec::xmlSecOpenSSLAppDefaultKeysMngrInit;
 use crate::xmlsec::xmlSecOpenSSLAppKeyLoadMemory;
 use crate::xmlsec::XMLSEC_KEYINFO_FLAGS_LAX_KEY_SEARCH;
+use crate::DecryptKeyPem;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::response::Response;
@@ -27,7 +28,7 @@ use tower::{Layer, Service};
 
 #[derive(Clone)]
 struct Key {
-    key: String,
+    key: DecryptKeyPem,
     key_name: String,
 }
 
@@ -37,11 +38,11 @@ pub struct DecryptionLayer {
 }
 
 impl DecryptionLayer {
-    pub fn new(key: &str, key_name: &str) -> Self {
+    pub fn new(key: &DecryptKeyPem, key_name: &str) -> Self {
         println!("creating new DecryptionLayer");
         DecryptionLayer {
             key: Key {
-                key: key.to_owned(),
+                key: key.clone(),
                 key_name: key_name.to_owned(),
             },
         }
@@ -134,7 +135,11 @@ where
     }
 }
 
-pub fn decrypt(key: &str, key_name: &str, xml: &str) -> Result<String, String> {
+pub fn decrypt(
+    DecryptKeyPem(key): &DecryptKeyPem,
+    key_name: &str,
+    xml: &str,
+) -> Result<String, String> {
     unsafe {
         let doc = XMLDocWrapper::from_xml(xml);
         let root = xmlDocGetRootElement(doc.ptr());

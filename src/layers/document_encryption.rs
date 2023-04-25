@@ -23,6 +23,8 @@ use crate::xmlsec::xmlSecOpenSSLAppKeyLoadMemory;
 use crate::xmlsec::xmlSecOpenSSLKeyDataAesGetKlass;
 use crate::xmlsec::xmlSecOpenSSLKeyDataDesGetKlass;
 use crate::xmlsec::XMLSEC_KEYINFO_FLAGS_LAX_KEY_SEARCH;
+use crate::EncTemplate;
+use crate::EncryptCertPem;
 use crate::SessionState;
 use axum::body::{self, Body};
 use axum::http::{Request, StatusCode};
@@ -35,7 +37,7 @@ use tower::{Layer, Service};
 
 #[derive(Clone)]
 struct XmlEncContext {
-    template: String,
+    template: EncTemplate,
 }
 
 #[derive(Clone)]
@@ -44,11 +46,11 @@ pub struct EncryptionLayer {
 }
 
 impl EncryptionLayer {
-    pub fn new(template: &str) -> Self {
+    pub fn new(template: &EncTemplate) -> Self {
         println!("creating new EncryptionLayer");
         EncryptionLayer {
             context: XmlEncContext {
-                template: template.to_owned(),
+                template: template.clone(),
             },
         }
     }
@@ -151,8 +153,8 @@ where
 }
 
 pub fn encrypt(
-    template: &str,
-    cert: &str,
+    EncTemplate(template): &EncTemplate,
+    EncryptCertPem(cert): &EncryptCertPem,
     certificate_name: &str,
     xml: &str,
 ) -> Result<String, String> {
