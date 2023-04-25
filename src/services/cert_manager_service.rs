@@ -16,14 +16,15 @@ impl CertManager {
                 WHERE client_id = $1
                     AND cert_type = $2
                     AND deleted_at IS NULL
-                    AND NOW()::timestamp > valid_from
-                    AND NOW()::timestamp < valid_to
+                    AND (NOW()::timestamp BETWEEN valid_from AND valid_to)
                     ORDER BY valid_to ASC",
         )
         .bind(client_id)
         .bind("xml-dsig")
         .fetch_optional(&self.pool)
         .await;
+
+        println!("dsig: {:?}", result);
 
         result.unwrap_or(None)
     }
@@ -34,8 +35,7 @@ impl CertManager {
                 WHERE client_id = $1
                     AND cert_type = $2
                     AND deleted_at IS NULL
-                    AND NOW()::timestamp > valid_from
-                    AND NOW()::timestamp < valid_to
+                    AND (NOW()::timestamp BETWEEN valid_from AND valid_to)
                     ORDER BY valid_to ASC",
         )
         .bind(client_id)

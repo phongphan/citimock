@@ -23,13 +23,14 @@ pub struct Client {
 
 impl Client {
     pub fn new(name: &str, password: &str, status: ClientStatus) -> Client {
+        let now = chrono::Utc::now();
         Client {
             uid: Uuid::new_v4().to_string(),
             name: name.to_owned(),
             status,
             hash: hash_password(password),
-            inserted_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
+            inserted_at: now,
+            updated_at: now,
         }
     }
 
