@@ -8,7 +8,6 @@ use axum::{
     Extension,
 };
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 use yaserde;
 use yaserde_derive::{YaDeserialize, YaSerialize};
@@ -49,7 +48,7 @@ pub struct AuthenticationError {
 }
 
 pub async fn oauth_token_v2(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Extension(session): Extension<SessionState>,
     Xml(body): Xml<AuthenticationRequest>,
 ) -> Result<Xml<AuthenticationResponse>, Response> {
@@ -93,7 +92,7 @@ pub async fn oauth_token_v2(
 }
 
 pub async fn oauth_token_v3(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Extension(session): Extension<SessionState>,
     Xml(body): Xml<AuthenticationRequest>,
 ) -> Result<Xml<AuthenticationResponse>, Response> {
